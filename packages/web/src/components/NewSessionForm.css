@@ -1,0 +1,97 @@
+.new-session-form-wrapper {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+}
+
+.new-session-form {
+  width: 100%;
+  max-width: 560px;
+  background: #fff;
+  border: 1px solid #e0e0e0;
+  border-radius: 12px;
+  padding: 28px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.new-session-form-title {
+  font-size: 18px;
+  font-weight: 600;
+  color: #1a1a1a;
+}
+
+.new-session-form-cwd {
+  font-size: 12px;
+  color: #888;
+  font-family: monospace;
+}
+
+.new-session-form-label {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 13px;
+  font-weight: 500;
+  color: #555;
+}
+
+.new-session-form-textarea {
+  padding: 10px 12px;
+  border: 1px solid #d0d0d0;
+  border-radius: 8px;
+  resize: vertical;
+  font-size: 14px;
+  line-height: 1.5;
+  outline: none;
+  transition: border-color 0.15s;
+}
+
+.new-session-form-textarea:focus {
+  border-color: #1976d2;
+}
+
+.new-session-form-input {
+  padding: 8px 12px;
+  border: 1px solid #d0d0d0;
+  border-radius: 8px;
+  font-size: 14px;
+  outline: none;
+  transition: border-color 0.15s;
+}
+
+.new-session-form-input:focus {
+  border-color: #1976d2;
+}
+
+.new-session-form-error {
+  padding: 8px 12px;
+  background: #ffebee;
+  color: #c62828;
+  border-radius: 6px;
+  font-size: 13px;
+}
+
+.new-session-form-submit {
+  padding: 10px 20px;
+  background: #1976d2;
+  color: #fff;
+  border: none;
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 500;
+  transition: background 0.15s;
+  align-self: flex-start;
+}
+
+.new-session-form-submit:hover:not(:disabled) {
+  background: #1565c0;
+}
+
+.new-session-form-submit:disabled {
+  background: #bdbdbd;
+  cursor: default;
+}
