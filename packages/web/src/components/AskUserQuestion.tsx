@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import type { PendingQuestion } from "../hooks/useSessionSocket";
 import "./AskUserQuestion.css";
 
@@ -9,6 +9,7 @@ interface AskUserQuestionProps {
 
 export function AskUserQuestion({ pendingQuestion, onAnswer }: AskUserQuestionProps) {
   const { requestId, questions } = pendingQuestion;
+  const [activeTab, setActiveTab] = useState(0);
   const [selections, setSelections] = useState<Record<string, string | Set<string>>>(() => {
     const init: Record<string, string | Set<string>> = {};
     for (const q of questions) {
@@ -17,6 +18,11 @@ export function AskUserQuestion({ pendingQuestion, onAnswer }: AskUserQuestionPr
     return init;
   });
   const [customInputs, setCustomInputs] = useState<Record<string, string>>({});
+
+  // Reset active tab when pendingQuestion changes
+  useEffect(() => {
+    setActiveTab(0);
+  }, [requestId]);
 
   const handleSelect = (question: string, label: string, multiSelect: boolean) => {
     setSelections((prev) => {
@@ -28,6 +34,11 @@ export function AskUserQuestion({ pendingQuestion, onAnswer }: AskUserQuestionPr
       }
       return { ...prev, [question]: label };
     });
+
+    // Auto-advance to next unanswered question on single-select
+    if (!multiSelect && activeTab < questions.length - 1) {
+      setTimeout(() => setActiveTab(activeTab + 1), 200);
+    }
   };
 
   const handleSubmit = () => {
@@ -52,16 +63,47 @@ export function AskUserQuestion({ pendingQuestion, onAnswer }: AskUserQuestionPr
     return !!sel;
   });
 
+  const isQuestionAnswered = (q: typeof questions[number]) => {
+    if (customInputs[q.question]) return true;
+    const sel = selections[q.question];
+    if (sel instanceof Set) return sel.size > 0;
+    return !!sel;
+  };
+
+  const currentQuestion = questions[activeTab];
+
   return (
     <div className="ask-question">
       <div className="ask-question-header">Claude is asking a question</div>
-      {questions.map((q) => (
-        <div key={q.question} className="ask-question-item">
-          <div className="ask-question-badge">{q.header}</div>
-          <div className="ask-question-text">{q.question}</div>
+
+      {questions.length > 1 && (
+        <div className="ask-question-tabs">
+          {questions.map((q, i) => (
+            <button
+              key={q.question}
+              className={`ask-question-tab ${i === activeTab ? "ask-question-tab--active" : ""} ${isQuestionAnswered(q) ? "ask-question-tab--answered" : ""}`}
+              onClick={() => setActiveTab(i)}
+            >
+              <span className="ask-question-tab-index">{i + 1}</span>
+              {q.header}
+              {isQuestionAnswered(q) && <span className="ask-question-tab-check">&#10003;</span>}
+            </button>
+          ))}
+        </div>
+      )}
+
+      {currentQuestion && (
+        <div className="ask-question-item">
+          {questions.length <= 1 && (
+            <div className="ask-question-badge">{currentQuestion.header}</div>
+          )}
+          <div className="ask-question-text">
+            {currentQuestion.question}
+            {currentQuestion.multiSelect && <span className="ask-question-multi-hint"> (multi-select)</span>}
+          </div>
           <div className="ask-question-options">
-            {q.options.map((opt) => {
-              const sel = selections[q.question];
+            {currentQuestion.options.map((opt) => {
+              const sel = selections[currentQuestion.question];
               const isSelected = sel instanceof Set
                 ? sel.has(opt.label)
                 : sel === opt.label;
@@ -69,7 +111,7 @@ export function AskUserQuestion({ pendingQuestion, onAnswer }: AskUserQuestionPr
                 <button
                   key={opt.label}
                   className={`ask-question-option ${isSelected ? "ask-question-option--selected" : ""}`}
-                  onClick={() => handleSelect(q.question, opt.label, q.multiSelect)}
+                  onClick={() => handleSelect(currentQuestion.question, opt.label, currentQuestion.multiSelect)}
                   title={opt.description}
                 >
                   <span className="ask-question-option-label">{opt.label}</span>
@@ -82,21 +124,29 @@ export function AskUserQuestion({ pendingQuestion, onAnswer }: AskUserQuestionPr
             <input
               type="text"
               placeholder="Or type a custom answer..."
-              value={customInputs[q.question] ?? ""}
+              value={customInputs[currentQuestion.question] ?? ""}
               onChange={(e) =>
-                setCustomInputs((prev) => ({ ...prev, [q.question]: e.target.value }))
+                setCustomInputs((prev) => ({ ...prev, [currentQuestion.question]: e.target.value }))
               }
             />
           </div>
         </div>
-      ))}
-      <button
-        className="ask-question-submit"
-        onClick={handleSubmit}
-        disabled={!allAnswered}
-      >
-        Submit Answer
-      </button>
+      )}
+
+      <div className="ask-question-footer">
+        {questions.length > 1 && (
+          <span className="ask-question-progress">
+            {questions.filter(isQuestionAnswered).length} / {questions.length} answered
+          </span>
+        )}
+        <button
+          className="ask-question-submit"
+          onClick={handleSubmit}
+          disabled={!allAnswered}
+        >
+          Submit Answer
+        </button>
+      </div>
     </div>
   );
 }
