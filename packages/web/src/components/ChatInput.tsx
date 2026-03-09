@@ -34,7 +34,7 @@ export function ChatInput({
   };
 
   const handleKeyDown = (e: KeyboardEvent<HTMLTextAreaElement>) => {
-    if (e.key === "Enter" && !e.shiftKey) {
+    if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) {
       e.preventDefault();
       handleSend();
     }
@@ -50,7 +50,7 @@ export function ChatInput({
 
   const defaultPlaceholder = disabled
     ? "Waiting for response..."
-    : "Type a message...";
+    : "Type a message... (Ctrl+Enter to send)";
 
   return (
     <div className="chat-input">
