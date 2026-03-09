@@ -50,8 +50,33 @@
   outline: none;
   font-size: 14px;
   line-height: 1.5;
-  max-height: 150px;
+  /* 5 lines max: 21px * 5 + 20px padding = 125px */
+  max-height: 125px;
+  overflow-y: hidden;
   transition: border-color 0.15s;
+
+  /* Overlay scrollbar — thin, doesn't affect layout */
+  scrollbar-width: thin;
+  scrollbar-color: rgba(0, 0, 0, 0.25) transparent;
+}
+
+/* WebKit overlay scrollbar */
+.chat-input-textarea::-webkit-scrollbar {
+  width: 6px;
+  background: transparent;
+}
+
+.chat-input-textarea::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.chat-input-textarea::-webkit-scrollbar-thumb {
+  background: rgba(0, 0, 0, 0.25);
+  border-radius: 3px;
+}
+
+.chat-input-textarea::-webkit-scrollbar-thumb:hover {
+  background: rgba(0, 0, 0, 0.4);
 }
 
 .chat-input-textarea:focus {

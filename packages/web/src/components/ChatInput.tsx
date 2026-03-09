@@ -30,6 +30,7 @@ export function ChatInput({
     setText("");
     if (textareaRef.current) {
       textareaRef.current.style.height = "auto";
+      textareaRef.current.style.overflowY = "hidden";
     }
   };
 
@@ -44,7 +45,10 @@ export function ChatInput({
     const el = textareaRef.current;
     if (el) {
       el.style.height = "auto";
-      el.style.height = Math.min(el.scrollHeight, 150) + "px";
+      // 5 lines max: lineHeight(21px) * 5 + padding(20px) = 125px
+      const maxHeight = 125;
+      el.style.height = Math.min(el.scrollHeight, maxHeight) + "px";
+      el.style.overflowY = el.scrollHeight > maxHeight ? "auto" : "hidden";
     }
   };
 
