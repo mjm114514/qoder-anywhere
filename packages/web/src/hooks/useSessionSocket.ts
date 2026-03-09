@@ -1,5 +1,9 @@
 import { useState, useEffect, useRef, useCallback } from "react";
-import type { WSServerMessage, AskUserQuestionItem } from "@lgtm-anywhere/shared";
+import type {
+  WSServerMessage,
+  AskUserQuestionItem,
+  TodoItem,
+} from "@lgtm-anywhere/shared";
 
 // A single content block in an assistant turn
 export type ContentBlock =
@@ -26,26 +30,31 @@ interface UseSessionSocketReturn {
   isLoadingHistory: boolean;
   error: string | null;
   pendingQuestion: PendingQuestion | null;
+  todos: TodoItem[];
   sendMessage: (text: string) => void;
   answerQuestion: (requestId: string, answers: Record<string, string>) => void;
   setMessages: React.Dispatch<React.SetStateAction<ChatMessage[]>>;
 }
 
 export function useSessionSocket(
-  sessionId: string | null
+  sessionId: string | null,
 ): UseSessionSocketReturn {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [isStreaming, setIsStreaming] = useState(false);
   const [isLoadingHistory, setIsLoadingHistory] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [pendingQuestion, setPendingQuestion] = useState<PendingQuestion | null>(null);
+  const [pendingQuestion, setPendingQuestion] =
+    useState<PendingQuestion | null>(null);
+  const [todos, setTodos] = useState<TodoItem[]>([]);
   const wsRef = useRef<WebSocket | null>(null);
   const streamBufRef = useRef<{ id: string; text: string } | null>(null);
   const isLoadingHistoryRef = useRef(false);
 
   useEffect(() => {
     // Reset pending question whenever session changes
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- intentional reset on session change
     setPendingQuestion(null);
+    setTodos([]);
 
     if (!sessionId) {
       wsRef.current?.close();
@@ -60,7 +69,7 @@ export function useSessionSocket(
 
     const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
     const ws = new WebSocket(
-      `${protocol}//${window.location.host}/ws/sessions/${sessionId}`
+      `${protocol}//${window.location.host}/ws/sessions/${sessionId}`,
     );
     wsRef.current = ws;
 
@@ -76,7 +85,9 @@ export function useSessionSocket(
         case "assistant": {
           const blocks = extractBlocks(msg.data.message);
           const text = blocks
-            .filter((b): b is ContentBlock & { type: "text" } => b.type === "text")
+            .filter(
+              (b): b is ContentBlock & { type: "text" } => b.type === "text",
+            )
             .map((b) => b.text)
             .join("");
           // Finalized assistant message — replace any streaming placeholder
@@ -100,7 +111,10 @@ export function useSessionSocket(
           const sEvent = msg.data.event as Record<string, unknown>;
           if (sEvent.type === "content_block_delta") {
             const delta = sEvent.delta as Record<string, unknown> | undefined;
-            if (delta?.type === "text_delta" && typeof delta.text === "string") {
+            if (
+              delta?.type === "text_delta" &&
+              typeof delta.text === "string"
+            ) {
               if (!streamBufRef.current) {
                 const id = `stream-${Date.now()}`;
                 streamBufRef.current = { id, text: "" };
@@ -142,7 +156,7 @@ export function useSessionSocket(
                   const hasToolUse = m.blocks.some(
                     (b) =>
                       b.type === "tool_use" &&
-                      b.toolUseId === toolResult.toolUseId
+                      b.toolUseId === toolResult.toolUseId,
                   );
                   if (hasToolUse) {
                     next[i] = {
@@ -219,6 +233,11 @@ export function useSessionSocket(
           setIsLoadingHistory(false);
           break;
         }
+
+        case "todo_update": {
+          setTodos(msg.data.todos);
+          break;
+        }
       }
     };
 
@@ -236,27 +255,34 @@ export function useSessionSocket(
     };
   }, [sessionId]);
 
-  const sendMessage = useCallback(
-    (text: string) => {
-      if (!wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) return;
-      wsRef.current.send(JSON.stringify({ type: "message", message: text }));
-      setIsStreaming(true);
-    },
-    []
-  );
+  const sendMessage = useCallback((text: string) => {
+    if (!wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) return;
+    wsRef.current.send(JSON.stringify({ type: "message", message: text }));
+    setIsStreaming(true);
+  }, []);
 
   const answerQuestion = useCallback(
     (requestId: string, answers: Record<string, string>) => {
       if (!wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) return;
       wsRef.current.send(
-        JSON.stringify({ type: "answer_question", requestId, answers })
+        JSON.stringify({ type: "answer_question", requestId, answers }),
       );
       setPendingQuestion(null);
     },
-    []
+    [],
   );
 
-  return { messages, isStreaming, isLoadingHistory, error, pendingQuestion, sendMessage, answerQuestion, setMessages };
+  return {
+    messages,
+    isStreaming,
+    isLoadingHistory,
+    error,
+    pendingQuestion,
+    todos,
+    sendMessage,
+    answerQuestion,
+    setMessages,
+  };
 }
 
 /** Extract all content blocks from an Anthropic message. */
@@ -304,14 +330,14 @@ function extractBlocks(message: unknown): ContentBlock[] {
 
 /** Extract a single tool_result block from a tool_result WS message. */
 function extractToolResultBlock(
-  message: unknown
-): ContentBlock & { type: "tool_result" } | null {
+  message: unknown,
+): (ContentBlock & { type: "tool_result" }) | null {
   if (!message || typeof message !== "object") return null;
   const msg = message as Record<string, unknown>;
   if (!Array.isArray(msg.content)) return null;
 
   const block = (msg.content as Array<Record<string, unknown>>).find(
-    (b) => b.type === "tool_result"
+    (b) => b.type === "tool_result",
   );
   if (!block) return null;
 
@@ -324,5 +350,9 @@ function extractToolResultBlock(
             .map((b) => b.text)
             .join("")
         : "";
-  return { type: "tool_result", toolUseId: block.tool_use_id as string, content };
+  return {
+    type: "tool_result",
+    toolUseId: block.tool_use_id as string,
+    content,
+  };
 }

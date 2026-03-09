@@ -46,7 +46,13 @@ export function MessageBubble({ message, cwd }: MessageBubbleProps) {
 
 type TimelineEntry =
   | { type: "text"; text: string }
-  | { type: "tool"; name: string; toolUseId: string; input?: unknown; result?: string };
+  | {
+      type: "tool";
+      name: string;
+      toolUseId: string;
+      input?: unknown;
+      result?: string;
+    };
 
 function buildTimelineItems(blocks: ContentBlock[]): TimelineEntry[] {
   const items: TimelineEntry[] = [];
@@ -66,6 +72,8 @@ function buildTimelineItems(blocks: ContentBlock[]): TimelineEntry[] {
         items.push({ type: "text", text: b.text });
       }
     } else if (b.type === "tool_use") {
+      // Skip TodoWrite — displayed in the dedicated TodoPanel instead
+      if (b.name === "TodoWrite") continue;
       items.push({
         type: "tool",
         name: b.name,
@@ -94,9 +102,7 @@ function TimelineItem({
       <div className="timeline-item">
         <div className="timeline-dot" />
         <div className="timeline-content timeline-text">
-          <ReactMarkdown remarkPlugins={[remarkGfm]}>
-            {item.text}
-          </ReactMarkdown>
+          <ReactMarkdown remarkPlugins={[remarkGfm]}>{item.text}</ReactMarkdown>
           {isStreaming && <span className="timeline-streaming-cursor" />}
         </div>
       </div>
@@ -120,15 +126,14 @@ function ToolBlock({
     <div className="timeline-item">
       <div className="timeline-dot timeline-dot--tool" />
       <div className="timeline-content">
-        <div
-          className="tool-header"
-          onClick={() => setExpanded(!expanded)}
-        >
+        <div className="tool-header" onClick={() => setExpanded(!expanded)}>
           <span className="tool-name">{item.name}</span>
           {inputSummary && (
             <span className="tool-input-summary">{inputSummary}</span>
           )}
-          <span className={`tool-chevron ${expanded ? "tool-chevron--open" : ""}`}>
+          <span
+            className={`tool-chevron ${expanded ? "tool-chevron--open" : ""}`}
+          >
             &#9656;
           </span>
         </div>
@@ -141,9 +146,7 @@ function ToolBlock({
             )}
           </div>
         )}
-        {item.result && (
-          <ToolResult content={item.result} />
-        )}
+        {item.result && <ToolResult content={item.result} />}
       </div>
     </div>
   );
@@ -156,7 +159,10 @@ function ToolResult({ content }: { content: string }) {
 
   return (
     <div className="tool-result">
-      <pre>{display}{truncated && !expanded && "..."}</pre>
+      <pre>
+        {display}
+        {truncated && !expanded && "..."}
+      </pre>
       {truncated && (
         <button
           className="tool-result-toggle"
@@ -186,8 +192,10 @@ function formatToolInput(_name: string, input: unknown, cwd?: string): string {
 
   // Common patterns for Claude tool calls
   if (typeof obj.command === "string") return truncate(obj.command, 60);
-  if (typeof obj.file_path === "string") return truncate(stripCwd(obj.file_path, cwd), 60);
-  if (typeof obj.path === "string") return truncate(stripCwd(obj.path, cwd), 60);
+  if (typeof obj.file_path === "string")
+    return truncate(stripCwd(obj.file_path, cwd), 60);
+  if (typeof obj.path === "string")
+    return truncate(stripCwd(obj.path, cwd), 60);
   if (typeof obj.pattern === "string") return truncate(obj.pattern, 60);
   if (typeof obj.query === "string") return truncate(obj.query, 60);
   if (typeof obj.url === "string") return truncate(obj.url, 60);
@@ -195,7 +203,7 @@ function formatToolInput(_name: string, input: unknown, cwd?: string): string {
 
   // For tools with a "name" sub-param (like Read with file_path)
   const firstStringVal = Object.values(obj).find(
-    (v) => typeof v === "string"
+    (v) => typeof v === "string",
   ) as string | undefined;
   if (firstStringVal) return truncate(firstStringVal, 60);
 

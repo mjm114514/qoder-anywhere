@@ -42,7 +42,8 @@ export type WSServerMessage =
   | WSErrorMessage
   | WSAskUserQuestionMessage
   | WSHistoryBatchStart
-  | WSHistoryBatchEnd;
+  | WSHistoryBatchEnd
+  | WSTodoUpdateMessage;
 
 export interface WSInitMessage {
   event: "init";
@@ -134,7 +135,12 @@ export interface WSHistoryBatchStart {
 
 export interface WSHistoryBatchEnd {
   event: "history_batch_end";
-  data: {};
+  data: Record<string, never>;
+}
+
+export interface WSTodoUpdateMessage {
+  event: "todo_update";
+  data: { todos: import("./todo.js").TodoItem[] };
 }
 
 // ── Global sync WebSocket: Server → Client ──

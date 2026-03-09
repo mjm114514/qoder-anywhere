@@ -25,6 +25,7 @@ export type {
   SSEStatusEvent,
   SSEErrorEvent,
 } from "./types/sse.js";
+export type { TodoItem } from "./types/todo.js";
 export type {
   WSClientMessage,
   WSMessageSend,
@@ -44,6 +45,7 @@ export type {
   WSAskUserQuestionMessage,
   WSHistoryBatchStart,
   WSHistoryBatchEnd,
+  WSTodoUpdateMessage,
   WSSyncMessage,
   WSSessionStateChange,
   WSSessionCreated,

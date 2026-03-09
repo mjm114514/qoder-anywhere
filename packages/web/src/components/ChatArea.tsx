@@ -5,6 +5,7 @@ import { MessageList } from "./MessageList";
 import type { MessageListHandle } from "./MessageList";
 import { ChatInput } from "./ChatInput";
 import { AskUserQuestion } from "./AskUserQuestion";
+import { TodoPanel } from "./TodoPanel";
 import type { SelectedProject } from "../App";
 import "./ChatArea.css";
 
@@ -21,8 +22,16 @@ export function ChatArea({
   showNewSession,
   onSessionCreated,
 }: ChatAreaProps) {
-  const { messages, isStreaming, isLoadingHistory, error, pendingQuestion, sendMessage, answerQuestion } =
-    useSessionSocket(selectedSessionId);
+  const {
+    messages,
+    isStreaming,
+    isLoadingHistory,
+    error,
+    pendingQuestion,
+    todos,
+    sendMessage,
+    answerQuestion,
+  } = useSessionSocket(selectedSessionId);
   const [creating, setCreating] = useState(false);
   const [createError, setCreateError] = useState<string | null>(null);
   const messageListRef = useRef<MessageListHandle>(null);
@@ -30,6 +39,7 @@ export function ChatArea({
   // Reset create state when switching away from new session
   useEffect(() => {
     if (!showNewSession) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- intentional reset on prop change
       setCreating(false);
       setCreateError(null);
     }
@@ -47,7 +57,7 @@ export function ChatArea({
       onSessionCreated(res.sessionId);
     } catch (err) {
       setCreateError(
-        err instanceof Error ? err.message : "Failed to create session"
+        err instanceof Error ? err.message : "Failed to create session",
       );
       setCreating(false);
     }
@@ -61,7 +71,7 @@ export function ChatArea({
         messageListRef.current?.scrollToBottom();
       });
     },
-    [sendMessage]
+    [sendMessage],
   );
 
   // New session: same layout as active chat, but empty messages + model selector
@@ -69,7 +79,11 @@ export function ChatArea({
     return (
       <div className="chat-area">
         {createError && <div className="chat-area-error">{createError}</div>}
-        <MessageList messages={[]} isStreaming={false} cwd={selectedProject.cwd} />
+        <MessageList
+          messages={[]}
+          isStreaming={false}
+          cwd={selectedProject.cwd}
+        />
         <ChatInput
           onSend={handleNewSessionSend}
           disabled={creating}
@@ -98,14 +112,23 @@ export function ChatArea({
   return (
     <div className="chat-area">
       {error && <div className="chat-area-error">{error}</div>}
-      <MessageList ref={messageListRef} messages={messages} isStreaming={isStreaming} cwd={selectedProject?.cwd} />
+      <MessageList
+        ref={messageListRef}
+        messages={messages}
+        isStreaming={isStreaming}
+        cwd={selectedProject?.cwd}
+      />
       {pendingQuestion && (
         <AskUserQuestion
           pendingQuestion={pendingQuestion}
           onAnswer={answerQuestion}
         />
       )}
-      <ChatInput onSend={handleSend} disabled={isStreaming || isLoadingHistory} />
+      <ChatInput
+        onSend={handleSend}
+        disabled={isStreaming || isLoadingHistory}
+      />
+      <TodoPanel todos={todos} />
     </div>
   );
 }

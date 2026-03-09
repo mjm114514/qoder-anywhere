@@ -1,8 +1,18 @@
-import { query, getSessionMessages, type Query, type SDKMessage, type CanUseTool } from "@anthropic-ai/claude-agent-sdk";
+import {
+  query,
+  getSessionMessages,
+  type Query,
+  type SDKMessage,
+  type CanUseTool,
+} from "@anthropic-ai/claude-agent-sdk";
 import { EventEmitter } from "node:events";
 import { randomUUID } from "node:crypto";
 import type WebSocket from "ws";
-import type { SessionState, AskUserQuestionItem } from "@lgtm-anywhere/shared";
+import type {
+  SessionState,
+  AskUserQuestionItem,
+  TodoItem,
+} from "@lgtm-anywhere/shared";
 import { config } from "../config.js";
 import { MessageQueue } from "./message-queue.js";
 
@@ -22,12 +32,17 @@ export interface ActiveSession {
   /** Call this to resolve sessionIdReady (set internally) */
   resolveSessionId: (id: string) => void;
   /** Pending AskUserQuestion requests awaiting user answers */
-  pendingQuestions: Map<string, {
-    input: Record<string, unknown>;
-    resolve: (answers: Record<string, string>) => void;
-  }>;
+  pendingQuestions: Map<
+    string,
+    {
+      input: Record<string, unknown>;
+      resolve: (answers: Record<string, string>) => void;
+    }
+  >;
   /** Full cache of WS events (history + runtime) for the session lifetime */
   messageCache: Array<{ event: string; data: unknown }>;
+  /** Current todo list maintained via TodoWrite tool interceptions */
+  currentTodos: TodoItem[];
 }
 
 export interface CreateSessionOptions {
@@ -39,7 +54,10 @@ export interface CreateSessionOptions {
   maxTurns?: number;
 }
 
-function makeSessionIdHook(): Pick<ActiveSession, "sessionIdReady" | "resolveSessionId"> {
+function makeSessionIdHook(): Pick<
+  ActiveSession,
+  "sessionIdReady" | "resolveSessionId"
+> {
   let resolveSessionId!: (id: string) => void;
   const sessionIdReady = new Promise<string>((resolve) => {
     resolveSessionId = resolve;
@@ -53,7 +71,10 @@ export class SessionManager extends EventEmitter {
 
   constructor() {
     super();
-    this.recycleTimer = setInterval(() => this.recycle(), config.recycleIntervalMs);
+    this.recycleTimer = setInterval(
+      () => this.recycle(),
+      config.recycleIntervalMs,
+    );
   }
 
   getState(sessionId: string): SessionState {
@@ -86,7 +107,7 @@ export class SessionManager extends EventEmitter {
 
   async createSession(
     cwd: string,
-    options: CreateSessionOptions
+    options: CreateSessionOptions,
   ): Promise<ActiveSession> {
     const messageQueue = new MessageQueue();
     const abortController = new AbortController();
@@ -108,9 +129,10 @@ export class SessionManager extends EventEmitter {
       resolveSessionId,
       pendingQuestions: new Map(),
       messageCache: [],
+      currentTodos: [],
     };
 
-    console.log("start query")
+    console.log("start query");
     const q = query({
       prompt: messageQueue,
       options: {
@@ -126,7 +148,7 @@ export class SessionManager extends EventEmitter {
         canUseTool: this.makeCanUseTool(session),
       },
     });
-    console.log("query created")
+    console.log("query created");
 
     session.query = q;
 
@@ -134,19 +156,22 @@ export class SessionManager extends EventEmitter {
     session.messageQueue.push(options.message);
 
     // Cache the first user message (not yet persisted)
-    session.messageCache.push({ event: "session_message", data: { message: options.message } });
+    session.messageCache.push({
+      event: "session_message",
+      data: { message: options.message },
+    });
 
     // Start consuming messages in the background (handles init + ongoing)
     this.runSession(session, q);
 
-    console.log("session created, waiting for sessionId via sessionIdReady")
+    console.log("session created, waiting for sessionId via sessionIdReady");
     return session;
   }
 
   async sendMessage(
     sessionId: string,
     message: string,
-    cwd: string
+    cwd: string,
   ): Promise<ActiveSession> {
     let session = this.activeSessions.get(sessionId);
 
@@ -165,7 +190,10 @@ export class SessionManager extends EventEmitter {
 
     session.state = "active";
     session.lastActivityAt = Date.now();
-    this.emit("session_state", { sessionId: session.sessionId, state: "active" as SessionState });
+    this.emit("session_state", {
+      sessionId: session.sessionId,
+      state: "active" as SessionState,
+    });
 
     return session;
   }
@@ -173,7 +201,7 @@ export class SessionManager extends EventEmitter {
   private async reactivateSession(
     sessionId: string,
     cwd: string,
-    firstMessage: string
+    firstMessage: string,
   ): Promise<ActiveSession> {
     const messageQueue = new MessageQueue();
     const abortController = new AbortController();
@@ -196,6 +224,7 @@ export class SessionManager extends EventEmitter {
       resolveSessionId,
       pendingQuestions: new Map(),
       messageCache: [],
+      currentTodos: [],
     };
 
     const q = query({
@@ -234,7 +263,9 @@ export class SessionManager extends EventEmitter {
     if (!session) return false;
 
     // Replay cached messages wrapped in batch markers
-    this.sendWS(ws, "history_batch_start", { messageCount: session.messageCache.length });
+    this.sendWS(ws, "history_batch_start", {
+      messageCount: session.messageCache.length,
+    });
     for (const cached of session.messageCache) {
       this.sendWS(ws, cached.event, cached.data);
     }
@@ -257,7 +288,10 @@ export class SessionManager extends EventEmitter {
 
     // Close all WebSocket connections
     for (const ws of session.wsClients) {
-      this.sendWS(ws, "error", { error: "Session stopped", code: "SESSION_STOPPED" });
+      this.sendWS(ws, "error", {
+        error: "Session stopped",
+        code: "SESSION_STOPPED",
+      });
       ws.close();
     }
     session.wsClients.clear();
@@ -267,7 +301,10 @@ export class SessionManager extends EventEmitter {
     session.query.close();
 
     this.activeSessions.delete(sessionId);
-    this.emit("session_state", { sessionId, state: "inactive" as SessionState });
+    this.emit("session_state", {
+      sessionId,
+      state: "inactive" as SessionState,
+    });
   }
 
   async setModel(sessionId: string, model: string): Promise<void> {
@@ -281,7 +318,11 @@ export class SessionManager extends EventEmitter {
   /**
    * Resolve a pending AskUserQuestion request with user-provided answers.
    */
-  resolveQuestion(sessionId: string, requestId: string, answers: Record<string, string>): boolean {
+  resolveQuestion(
+    sessionId: string,
+    requestId: string,
+    answers: Record<string, string>,
+  ): boolean {
     const session = this.activeSessions.get(sessionId);
     if (!session) return false;
     const pending = session.pendingQuestions.get(requestId);
@@ -294,9 +335,12 @@ export class SessionManager extends EventEmitter {
   /**
    * Convert persisted session messages from the SDK into WS events for replay.
    */
-  async convertHistoryToWSEvents(sessionId: string): Promise<Array<{ event: string; data: unknown }>> {
+  async convertHistoryToWSEvents(
+    sessionId: string,
+  ): Promise<Array<{ event: string; data: unknown }>> {
     const messages = await getSessionMessages(sessionId, { limit: 1000 });
     const events: Array<{ event: string; data: unknown }> = [];
+    let lastTodos: TodoItem[] | null = null;
 
     for (const m of messages) {
       if (m.type === "assistant") {
@@ -304,6 +348,21 @@ export class SessionManager extends EventEmitter {
           event: "assistant",
           data: { type: "assistant", uuid: m.uuid, message: m.message },
         });
+
+        // Scan assistant message content blocks for the last TodoWrite tool_use
+        const msg = m.message as Record<string, unknown> | undefined;
+        if (msg && Array.isArray(msg.content)) {
+          for (const block of msg.content as Array<Record<string, unknown>>) {
+            if (block.type === "tool_use" && block.name === "TodoWrite") {
+              const blockInput = block.input as
+                | Record<string, unknown>
+                | undefined;
+              if (blockInput && Array.isArray(blockInput.todos)) {
+                lastTodos = blockInput.todos as TodoItem[];
+              }
+            }
+          }
+        }
       } else if (m.type === "user") {
         if (isToolResultMessage(m.message)) {
           events.push({
@@ -322,6 +381,11 @@ export class SessionManager extends EventEmitter {
       }
     }
 
+    // Append the last todo state so clients can restore the todo panel
+    if (lastTodos) {
+      events.push({ event: "todo_update", data: { todos: lastTodos } });
+    }
+
     return events;
   }
 
@@ -336,7 +400,10 @@ export class SessionManager extends EventEmitter {
         const questions = (input.questions ?? []) as AskUserQuestionItem[];
 
         // Cache & broadcast question to all connected WS clients
-        const cached = { event: "ask_user_question", data: { requestId, questions } };
+        const cached = {
+          event: "ask_user_question",
+          data: { requestId, questions },
+        };
         session.messageCache.push(cached);
         this.broadcast(session, cached.event, cached.data);
 
@@ -369,7 +436,11 @@ export class SessionManager extends EventEmitter {
     }
   }
 
-  private broadcast(session: ActiveSession, event: string, data: unknown): void {
+  private broadcast(
+    session: ActiveSession,
+    event: string,
+    data: unknown,
+  ): void {
     const message = JSON.stringify({ event, data });
     for (const ws of session.wsClients) {
       if (ws.readyState === ws.OPEN) {
@@ -383,7 +454,10 @@ export class SessionManager extends EventEmitter {
    * Called when a finalized message arrives that supersedes transient events
    * (e.g., stream_event deltas are superseded by the complete assistant message).
    */
-  private pruneCache(cache: Array<{ event: string; data: unknown }>, eventType: string): void {
+  private pruneCache(
+    cache: Array<{ event: string; data: unknown }>,
+    eventType: string,
+  ): void {
     for (let i = cache.length - 2; i >= 0; i--) {
       if (cache[i].event === eventType) {
         cache.splice(i, 1);
@@ -391,7 +465,9 @@ export class SessionManager extends EventEmitter {
     }
   }
 
-  private mapMessageToEvent(message: SDKMessage): { event: string; data: unknown } | null {
+  private mapMessageToEvent(
+    message: SDKMessage,
+  ): { event: string; data: unknown } | null {
     switch (message.type) {
       case "system":
         if ("subtype" in message && message.subtype === "init") {
@@ -484,8 +560,14 @@ export class SessionManager extends EventEmitter {
           if (!session.sessionId) {
             session.sessionId = message.session_id;
             this.activeSessions.set(session.sessionId, session);
-            this.emit("session_state", { sessionId: session.sessionId, state: "active" as SessionState });
-            this.emit("session_created", { sessionId: session.sessionId, cwd: session.cwd });
+            this.emit("session_state", {
+              sessionId: session.sessionId,
+              state: "active" as SessionState,
+            });
+            this.emit("session_created", {
+              sessionId: session.sessionId,
+              cwd: session.cwd,
+            });
           }
           session.resolveSessionId(message.session_id);
         }
@@ -516,11 +598,27 @@ export class SessionManager extends EventEmitter {
           this.broadcast(session, mapped.event, mapped.data);
         }
 
+        // Extract TodoWrite calls from assistant messages.
+        // canUseTool is never called for TodoWrite (SDK auto-allows it),
+        // so we detect it from the finalized assistant message content blocks.
+        if (message.type === "assistant") {
+          const todos = extractTodosFromAssistant(message);
+          if (todos) {
+            session.currentTodos = todos;
+            const todoEvent = { event: "todo_update" as const, data: { todos } };
+            session.messageCache.push(todoEvent);
+            this.broadcast(session, todoEvent.event, todoEvent.data);
+          }
+        }
+
         // result means this turn is done → IDLE
         if (message.type === "result") {
           session.state = "idle";
           session.lastActivityAt = Date.now();
-          this.emit("session_state", { sessionId: session.sessionId, state: "idle" as SessionState });
+          this.emit("session_state", {
+            sessionId: session.sessionId,
+            state: "idle" as SessionState,
+          });
           // Don't break — generator stays alive, waiting for next message from queue
         }
       }
@@ -533,7 +631,10 @@ export class SessionManager extends EventEmitter {
 
     // Generator exited → process terminated
     this.activeSessions.delete(session.sessionId);
-    this.emit("session_state", { sessionId: session.sessionId, state: "inactive" as SessionState });
+    this.emit("session_state", {
+      sessionId: session.sessionId,
+      state: "inactive" as SessionState,
+    });
   }
 
   private recycle(): void {
@@ -552,7 +653,7 @@ export class SessionManager extends EventEmitter {
   async shutdown(): Promise<void> {
     clearInterval(this.recycleTimer);
     const stops = Array.from(this.activeSessions.keys()).map((id) =>
-      this.stopSession(id)
+      this.stopSession(id),
     );
     await Promise.all(stops);
   }
@@ -564,7 +665,7 @@ function isToolResultMessage(message: unknown): boolean {
   const msg = message as Record<string, unknown>;
   if (!Array.isArray(msg.content)) return false;
   return (msg.content as Array<Record<string, unknown>>).some(
-    (b) => b.type === "tool_result"
+    (b) => b.type === "tool_result",
   );
 }
 
@@ -580,4 +681,23 @@ function extractUserText(message: unknown): string {
       .join("");
   }
   return "";
+}
+
+/**
+ * Extract TodoWrite todos from an assistant SDK message.
+ * Returns the todos array if a TodoWrite tool_use block is found, null otherwise.
+ */
+function extractTodosFromAssistant(message: SDKMessage): TodoItem[] | null {
+  const msg = (message as any).message as Record<string, unknown> | undefined;
+  if (!msg || !Array.isArray(msg.content)) return null;
+
+  for (const block of msg.content as Array<Record<string, unknown>>) {
+    if (block.type === "tool_use" && block.name === "TodoWrite") {
+      const input = block.input as Record<string, unknown> | undefined;
+      if (input && Array.isArray(input.todos)) {
+        return input.todos as TodoItem[];
+      }
+    }
+  }
+  return null;
 }
