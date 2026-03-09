@@ -73,6 +73,17 @@ export class SessionManager extends EventEmitter {
     return this.activeSessions.get(sessionId);
   }
 
+  /** Return all in-memory active sessions whose cwd matches. */
+  getActiveSessionsByCwd(cwd: string): ActiveSession[] {
+    const result: ActiveSession[] = [];
+    for (const session of this.activeSessions.values()) {
+      if (session.sessionId && session.cwd === cwd) {
+        result.push(session);
+      }
+    }
+    return result;
+  }
+
   async createSession(
     cwd: string,
     options: CreateSessionOptions

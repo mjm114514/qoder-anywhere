@@ -23,6 +23,8 @@ export function createSessionRoutes(sessionManager: SessionManager): Router {
       const limit = parseInt(req.query.limit as string) || 50;
       const sessions = await listSessions({ dir: cwd, limit });
 
+      const diskIds = new Set(sessions.map((s) => s.sessionId));
+
       const result = sessions.map((s) => ({
         sessionId: s.sessionId,
         summary: s.summary,
@@ -32,6 +34,21 @@ export function createSessionRoutes(sessionManager: SessionManager): Router {
         gitBranch: s.gitBranch,
         state: sessionManager.getState(s.sessionId),
       }));
+
+      // Merge in-memory sessions that haven't been persisted to disk yet
+      for (const active of sessionManager.getActiveSessionsByCwd(cwd)) {
+        if (!diskIds.has(active.sessionId)) {
+          result.unshift({
+            sessionId: active.sessionId,
+            summary: "",
+            lastModified: active.createdAt,
+            fileSize: 0,
+            cwd: active.cwd,
+            gitBranch: undefined,
+            state: active.state,
+          });
+        }
+      }
 
       res.json(result);
     } catch (err) {
