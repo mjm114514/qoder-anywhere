@@ -1,4 +1,5 @@
 import { query, type Query, type SDKMessage } from "@anthropic-ai/claude-agent-sdk";
+import { EventEmitter } from "node:events";
 import type WebSocket from "ws";
 import type { SessionState } from "@lgtm-anywhere/shared";
 import { config } from "../config.js";
@@ -38,11 +39,12 @@ function makeSessionIdHook(): Pick<ActiveSession, "sessionIdReady" | "resolveSes
   return { sessionIdReady, resolveSessionId };
 }
 
-export class SessionManager {
+export class SessionManager extends EventEmitter {
   private activeSessions = new Map<string, ActiveSession>();
   private recycleTimer: ReturnType<typeof setInterval>;
 
   constructor() {
+    super();
     this.recycleTimer = setInterval(() => this.recycle(), config.recycleIntervalMs);
   }
 
@@ -50,6 +52,13 @@ export class SessionManager {
     const session = this.activeSessions.get(sessionId);
     if (!session) return "inactive";
     return session.state;
+  }
+
+  getAllStates(): Array<{ sessionId: string; state: SessionState }> {
+    return Array.from(this.activeSessions.values()).map((s) => ({
+      sessionId: s.sessionId,
+      state: s.state,
+    }));
   }
 
   getActiveSession(sessionId: string): ActiveSession | undefined {
@@ -124,6 +133,7 @@ export class SessionManager {
 
     session.state = "active";
     session.lastActivityAt = Date.now();
+    this.emit("session_state", { sessionId: session.sessionId, state: "active" as SessionState });
 
     return session;
   }
@@ -167,6 +177,7 @@ export class SessionManager {
     };
 
     this.activeSessions.set(sessionId, session);
+    this.emit("session_state", { sessionId, state: "active" as SessionState });
 
     // Push the first message immediately
     session.messageQueue.push(firstMessage);
@@ -207,6 +218,7 @@ export class SessionManager {
     session.query.close();
 
     this.activeSessions.delete(sessionId);
+    this.emit("session_state", { sessionId, state: "inactive" as SessionState });
   }
 
   async setModel(sessionId: string, model: string): Promise<void> {
@@ -324,6 +336,7 @@ export class SessionManager {
           if (!session.sessionId) {
             session.sessionId = message.session_id;
             this.activeSessions.set(session.sessionId, session);
+            this.emit("session_state", { sessionId: session.sessionId, state: "active" as SessionState });
           }
           session.resolveSessionId(message.session_id);
         }
@@ -337,6 +350,7 @@ export class SessionManager {
         if (message.type === "result") {
           session.state = "idle";
           session.lastActivityAt = Date.now();
+          this.emit("session_state", { sessionId: session.sessionId, state: "idle" as SessionState });
           // Don't break — generator stays alive, waiting for next message from queue
         }
       }
@@ -349,6 +363,7 @@ export class SessionManager {
 
     // Generator exited → process terminated
     this.activeSessions.delete(session.sessionId);
+    this.emit("session_state", { sessionId: session.sessionId, state: "inactive" as SessionState });
   }
 
   private recycle(): void {

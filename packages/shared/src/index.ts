@@ -37,4 +37,6 @@ export type {
   WSToolProgressMessage,
   WSStatusMessage,
   WSErrorMessage,
+  WSSyncMessage,
+  WSSessionStateChange,
 } from "./types/ws.js";

@@ -6,9 +6,10 @@ import "./MessageList.css";
 interface MessageListProps {
   messages: ChatMessage[];
   isStreaming: boolean;
+  cwd?: string;
 }
 
-export function MessageList({ messages, isStreaming }: MessageListProps) {
+export function MessageList({ messages, isStreaming, cwd }: MessageListProps) {
   const endRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -26,7 +27,7 @@ export function MessageList({ messages, isStreaming }: MessageListProps) {
   return (
     <div className="message-list">
       {messages.map((msg) => (
-        <MessageBubble key={msg.id} message={msg} />
+        <MessageBubble key={msg.id} message={msg} cwd={cwd} />
       ))}
       <div ref={endRef} />
     </div>

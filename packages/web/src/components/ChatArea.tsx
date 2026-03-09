@@ -145,7 +145,7 @@ export function ChatArea({
     return (
       <div className="chat-area">
         {createError && <div className="chat-area-error">{createError}</div>}
-        <MessageList messages={[]} isStreaming={false} />
+        <MessageList messages={[]} isStreaming={false} cwd={selectedProject.cwd} />
         <ChatInput
           onSend={handleNewSessionSend}
           disabled={creating}
@@ -174,7 +174,7 @@ export function ChatArea({
   return (
     <div className="chat-area">
       {error && <div className="chat-area-error">{error}</div>}
-      <MessageList messages={messages} isStreaming={isStreaming} />
+      <MessageList messages={messages} isStreaming={isStreaming} cwd={selectedProject?.cwd} />
       <ChatInput onSend={sendMessage} disabled={isStreaming} />
     </div>
   );

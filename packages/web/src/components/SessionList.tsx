@@ -1,6 +1,7 @@
 import { useEffect, useState, useCallback } from "react";
 import { fetchSessions } from "../api";
 import { formatRelativeTime } from "../utils/format";
+import { useSessionSync } from "../hooks/useSessionSync";
 import type { SessionSummary, SessionState } from "@lgtm-anywhere/shared";
 import "./SessionList.css";
 
@@ -28,6 +29,7 @@ export function SessionList({
   const [sessions, setSessions] = useState<SessionSummary[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const { getState } = useSessionSync();
 
   const load = useCallback(() => {
     setLoading(true);
@@ -67,6 +69,7 @@ export function SessionList({
 
       {sessions.map((s) => {
         const isSelected = s.sessionId === selectedSessionId;
+        const liveState = getState(s.sessionId) ?? s.state;
         return (
           <button
             key={s.sessionId}
@@ -75,15 +78,15 @@ export function SessionList({
           >
             <div className="session-list-item-top">
               <span
-                className={`session-list-dot session-list-dot--${s.state}`}
-                title={STATE_LABELS[s.state]}
+                className={`session-list-dot session-list-dot--${liveState}`}
+                title={STATE_LABELS[liveState]}
               />
               <span className="session-list-item-summary">
                 {s.summary || s.sessionId.slice(0, 8)}
               </span>
             </div>
             <div className="session-list-item-meta">
-              {STATE_LABELS[s.state]} &middot;{" "}
+              {STATE_LABELS[liveState]} &middot;{" "}
               {formatRelativeTime(s.lastModified)}
             </div>
           </button>

@@ -1,28 +1,46 @@
 import { WebSocketServer, type WebSocket } from "ws";
 import type { IncomingMessage } from "node:http";
 import type { Server } from "node:http";
-import type { WSClientMessage } from "@lgtm-anywhere/shared";
+import type { WSClientMessage, SessionState } from "@lgtm-anywhere/shared";
 import { listSessions } from "@anthropic-ai/claude-agent-sdk";
 import { SessionManager } from "../services/session-manager.js";
 
 const WS_PATH_RE = /^\/ws\/sessions\/([^/]+)$/;
+const WS_SYNC_PATH_RE = /^\/ws\/sync$/;
 
 export function attachWebSocket(server: Server, sessionManager: SessionManager): void {
   const wss = new WebSocketServer({ noServer: true });
+  const syncClients = new Set<WebSocket>();
+
+  // Listen for session state changes and broadcast to all sync clients
+  sessionManager.on("session_state", (payload: { sessionId: string; state: SessionState }) => {
+    const message = JSON.stringify({ event: "session_state", data: payload });
+    for (const ws of syncClients) {
+      if (ws.readyState === ws.OPEN) {
+        ws.send(message);
+      }
+    }
+  });
 
   server.on("upgrade", (req: IncomingMessage, socket, head) => {
     const url = new URL(req.url ?? "/", `http://${req.headers.host}`);
-    const match = url.pathname.match(WS_PATH_RE);
 
-    if (!match) {
-      socket.destroy();
+    const sessionMatch = url.pathname.match(WS_PATH_RE);
+    if (sessionMatch) {
+      wss.handleUpgrade(req, socket, head, (ws) => {
+        handleConnection(ws, sessionMatch[1], sessionManager);
+      });
       return;
     }
 
-    wss.handleUpgrade(req, socket, head, (ws) => {
-      const sessionId = match[1];
-      handleConnection(ws, sessionId, sessionManager);
-    });
+    if (WS_SYNC_PATH_RE.test(url.pathname)) {
+      wss.handleUpgrade(req, socket, head, (ws) => {
+        handleSyncConnection(ws, syncClients, sessionManager);
+      });
+      return;
+    }
+
+    socket.destroy();
   });
 }
 
@@ -94,5 +112,22 @@ function handleConnection(
 
   ws.on("close", () => {
     sessionManager.unsubscribeWS(sessionId, ws);
+  });
+}
+
+function handleSyncConnection(
+  ws: WebSocket,
+  syncClients: Set<WebSocket>,
+  sessionManager: SessionManager
+): void {
+  syncClients.add(ws);
+
+  // Send current snapshot of all active/idle session states
+  for (const entry of sessionManager.getAllStates()) {
+    ws.send(JSON.stringify({ event: "session_state", data: entry }));
+  }
+
+  ws.on("close", () => {
+    syncClients.delete(ws);
   });
 }

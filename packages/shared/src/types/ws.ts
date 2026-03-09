@@ -86,3 +86,12 @@ export interface WSErrorMessage {
     code: string;
   };
 }
+
+// ── Global sync WebSocket: Server → Client ──
+
+export type WSSyncMessage = WSSessionStateChange;
+
+export interface WSSessionStateChange {
+  event: "session_state";
+  data: { sessionId: string; state: import("./session.js").SessionState };
+}

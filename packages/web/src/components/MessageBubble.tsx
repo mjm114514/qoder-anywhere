@@ -6,9 +6,10 @@ import "./MessageBubble.css";
 
 interface MessageBubbleProps {
   message: ChatMessage;
+  cwd?: string;
 }
 
-export function MessageBubble({ message }: MessageBubbleProps) {
+export function MessageBubble({ message, cwd }: MessageBubbleProps) {
   if (message.role === "user") {
     return (
       <div className="message-bubble message-bubble--user">
@@ -28,6 +29,7 @@ export function MessageBubble({ message }: MessageBubbleProps) {
           key={i}
           item={item}
           isStreaming={i === items.length - 1 && !!message.isStreaming}
+          cwd={cwd}
         />
       ))}
       {items.length === 0 && message.isStreaming && (
@@ -81,9 +83,11 @@ function buildTimelineItems(blocks: ContentBlock[]): TimelineEntry[] {
 function TimelineItem({
   item,
   isStreaming,
+  cwd,
 }: {
   item: TimelineEntry;
   isStreaming: boolean;
+  cwd?: string;
 }) {
   if (item.type === "text") {
     return (
@@ -99,16 +103,18 @@ function TimelineItem({
     );
   }
 
-  return <ToolBlock item={item} />;
+  return <ToolBlock item={item} cwd={cwd} />;
 }
 
 function ToolBlock({
   item,
+  cwd,
 }: {
   item: TimelineEntry & { type: "tool" };
+  cwd?: string;
 }) {
   const [expanded, setExpanded] = useState(false);
-  const inputSummary = formatToolInput(item.name, item.input);
+  const inputSummary = formatToolInput(item.name, item.input, cwd);
 
   return (
     <div className="timeline-item">
@@ -163,15 +169,25 @@ function ToolResult({ content }: { content: string }) {
   );
 }
 
+/** Strip cwd prefix from a file path for shorter display. */
+function stripCwd(filePath: string, cwd?: string): string {
+  if (!cwd) return filePath;
+  const prefix = cwd.endsWith("/") ? cwd : cwd + "/";
+  if (filePath.startsWith(prefix)) {
+    return filePath.slice(prefix.length);
+  }
+  return filePath;
+}
+
 /** Format a short summary of tool input for the header line. */
-function formatToolInput(_name: string, input: unknown): string {
+function formatToolInput(_name: string, input: unknown, cwd?: string): string {
   if (!input || typeof input !== "object") return "";
   const obj = input as Record<string, unknown>;
 
   // Common patterns for Claude tool calls
   if (typeof obj.command === "string") return truncate(obj.command, 60);
-  if (typeof obj.file_path === "string") return truncate(obj.file_path, 60);
-  if (typeof obj.path === "string") return truncate(obj.path, 60);
+  if (typeof obj.file_path === "string") return truncate(stripCwd(obj.file_path, cwd), 60);
+  if (typeof obj.path === "string") return truncate(stripCwd(obj.path, cwd), 60);
   if (typeof obj.pattern === "string") return truncate(obj.pattern, 60);
   if (typeof obj.query === "string") return truncate(obj.query, 60);
   if (typeof obj.url === "string") return truncate(obj.url, 60);
