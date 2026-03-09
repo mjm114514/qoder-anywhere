@@ -105,6 +105,15 @@ function handleConnection(
           "SEND_ERROR"
         );
       }
+    } else if (msg.type === "answer_question") {
+      if (!msg.requestId || !msg.answers) {
+        sendError(ws, "requestId and answers are required", "INVALID_REQUEST");
+        return;
+      }
+      const resolved = sessionManager.resolveQuestion(sessionId, msg.requestId, msg.answers);
+      if (!resolved) {
+        sendError(ws, "No pending question with that requestId", "NOT_FOUND");
+      }
     } else {
       sendError(ws, `Unknown message type: ${(msg as any).type}`, "UNKNOWN_TYPE");
     }

@@ -4,6 +4,7 @@ import { useSessionSocket } from "../hooks/useSessionSocket";
 import { extractTextContent, extractContentBlocks } from "../utils/format";
 import { MessageList } from "./MessageList";
 import { ChatInput } from "./ChatInput";
+import { AskUserQuestion } from "./AskUserQuestion";
 import type { SelectedProject } from "../App";
 import type { ChatMessage } from "../hooks/useSessionSocket";
 import "./ChatArea.css";
@@ -21,7 +22,7 @@ export function ChatArea({
   showNewSession,
   onSessionCreated,
 }: ChatAreaProps) {
-  const { messages, isStreaming, error, sendMessage, setMessages } =
+  const { messages, isStreaming, error, pendingQuestion, sendMessage, answerQuestion, setMessages } =
     useSessionSocket(selectedSessionId);
   const [creating, setCreating] = useState(false);
   const [createError, setCreateError] = useState<string | null>(null);
@@ -175,6 +176,12 @@ export function ChatArea({
     <div className="chat-area">
       {error && <div className="chat-area-error">{error}</div>}
       <MessageList messages={messages} isStreaming={isStreaming} cwd={selectedProject?.cwd} />
+      {pendingQuestion && (
+        <AskUserQuestion
+          pendingQuestion={pendingQuestion}
+          onAnswer={answerQuestion}
+        />
+      )}
       <ChatInput onSend={sendMessage} disabled={isStreaming} />
     </div>
   );

@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from "react";
-import type { WSServerMessage } from "@lgtm-anywhere/shared";
+import type { WSServerMessage, AskUserQuestionItem } from "@lgtm-anywhere/shared";
 
 // A single content block in an assistant turn
 export type ContentBlock =
@@ -15,11 +15,18 @@ export interface ChatMessage {
   isStreaming?: boolean;
 }
 
+export interface PendingQuestion {
+  requestId: string;
+  questions: AskUserQuestionItem[];
+}
+
 interface UseSessionSocketReturn {
   messages: ChatMessage[];
   isStreaming: boolean;
   error: string | null;
+  pendingQuestion: PendingQuestion | null;
   sendMessage: (text: string) => void;
+  answerQuestion: (requestId: string, answers: Record<string, string>) => void;
   setMessages: React.Dispatch<React.SetStateAction<ChatMessage[]>>;
 }
 
@@ -29,6 +36,7 @@ export function useSessionSocket(
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [isStreaming, setIsStreaming] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [pendingQuestion, setPendingQuestion] = useState<PendingQuestion | null>(null);
   const wsRef = useRef<WebSocket | null>(null);
   const streamBufRef = useRef<{ id: string; text: string } | null>(null);
 
@@ -154,6 +162,15 @@ export function useSessionSocket(
         case "result": {
           setIsStreaming(false);
           streamBufRef.current = null;
+          setPendingQuestion(null);
+          break;
+        }
+
+        case "ask_user_question": {
+          setPendingQuestion({
+            requestId: msg.data.requestId,
+            questions: msg.data.questions,
+          });
           break;
         }
 
@@ -199,7 +216,18 @@ export function useSessionSocket(
     []
   );
 
-  return { messages, isStreaming, error, sendMessage, setMessages };
+  const answerQuestion = useCallback(
+    (requestId: string, answers: Record<string, string>) => {
+      if (!wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) return;
+      wsRef.current.send(
+        JSON.stringify({ type: "answer_question", requestId, answers })
+      );
+      setPendingQuestion(null);
+    },
+    []
+  );
+
+  return { messages, isStreaming, error, pendingQuestion, sendMessage, answerQuestion, setMessages };
 }
 
 /** Extract all content blocks from an Anthropic message. */

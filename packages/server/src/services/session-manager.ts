@@ -1,7 +1,8 @@
-import { query, type Query, type SDKMessage } from "@anthropic-ai/claude-agent-sdk";
+import { query, type Query, type SDKMessage, type CanUseTool } from "@anthropic-ai/claude-agent-sdk";
 import { EventEmitter } from "node:events";
+import { randomUUID } from "node:crypto";
 import type WebSocket from "ws";
-import type { SessionState } from "@lgtm-anywhere/shared";
+import type { SessionState, AskUserQuestionItem } from "@lgtm-anywhere/shared";
 import { config } from "../config.js";
 import { MessageQueue } from "./message-queue.js";
 
@@ -20,6 +21,11 @@ export interface ActiveSession {
   sessionIdReady: Promise<string>;
   /** Call this to resolve sessionIdReady (set internally) */
   resolveSessionId: (id: string) => void;
+  /** Pending AskUserQuestion requests awaiting user answers */
+  pendingQuestions: Map<string, {
+    input: Record<string, unknown>;
+    resolve: (answers: Record<string, string>) => void;
+  }>;
 }
 
 export interface CreateSessionOptions {
@@ -72,6 +78,24 @@ export class SessionManager extends EventEmitter {
     const messageQueue = new MessageQueue();
     const abortController = new AbortController();
 
+    const { sessionIdReady, resolveSessionId } = makeSessionIdHook();
+
+    const session: ActiveSession = {
+      sessionId: "", // will be set from init message
+      cwd,
+      query: null as unknown as Query, // set below after canUseTool is ready
+      messageQueue,
+      abortController,
+      state: "active",
+      model: options.model,
+      createdAt: Date.now(),
+      lastActivityAt: Date.now(),
+      wsClients: new Set(),
+      sessionIdReady,
+      resolveSessionId,
+      pendingQuestions: new Map(),
+    };
+
     console.log("start query")
     const q = query({
       prompt: messageQueue,
@@ -85,26 +109,12 @@ export class SessionManager extends EventEmitter {
         maxTurns: options.maxTurns,
         abortController,
         includePartialMessages: true,
+        canUseTool: this.makeCanUseTool(session),
       },
     });
     console.log("query created")
 
-    const { sessionIdReady, resolveSessionId } = makeSessionIdHook();
-
-    const session: ActiveSession = {
-      sessionId: "", // will be set from init message
-      cwd,
-      query: q,
-      messageQueue,
-      abortController,
-      state: "active",
-      model: options.model,
-      createdAt: Date.now(),
-      lastActivityAt: Date.now(),
-      wsClients: new Set(),
-      sessionIdReady,
-      resolveSessionId,
-    };
+    session.query = q;
 
     // Push the first user message immediately
     session.messageQueue.push(options.message);
@@ -146,6 +156,25 @@ export class SessionManager extends EventEmitter {
     const messageQueue = new MessageQueue();
     const abortController = new AbortController();
 
+    // sessionId is already known for reactivation — resolve immediately
+    const { sessionIdReady, resolveSessionId } = makeSessionIdHook();
+    resolveSessionId(sessionId);
+
+    const session: ActiveSession = {
+      sessionId,
+      cwd,
+      query: null as unknown as Query,
+      messageQueue,
+      abortController,
+      state: "active",
+      createdAt: Date.now(),
+      lastActivityAt: Date.now(),
+      wsClients: new Set(),
+      sessionIdReady,
+      resolveSessionId,
+      pendingQuestions: new Map(),
+    };
+
     const q = query({
       prompt: messageQueue,
       options: {
@@ -155,26 +184,11 @@ export class SessionManager extends EventEmitter {
         allowDangerouslySkipPermissions: true,
         abortController,
         includePartialMessages: true,
+        canUseTool: this.makeCanUseTool(session),
       },
     });
 
-    // sessionId is already known for reactivation — resolve immediately
-    const { sessionIdReady, resolveSessionId } = makeSessionIdHook();
-    resolveSessionId(sessionId);
-
-    const session: ActiveSession = {
-      sessionId,
-      cwd,
-      query: q,
-      messageQueue,
-      abortController,
-      state: "active",
-      createdAt: Date.now(),
-      lastActivityAt: Date.now(),
-      wsClients: new Set(),
-      sessionIdReady,
-      resolveSessionId,
-    };
+    session.query = q;
 
     this.activeSessions.set(sessionId, session);
     this.emit("session_state", { sessionId, state: "active" as SessionState });
@@ -227,6 +241,51 @@ export class SessionManager extends EventEmitter {
       await session.query.setModel(model);
       session.model = model;
     }
+  }
+
+  /**
+   * Resolve a pending AskUserQuestion request with user-provided answers.
+   */
+  resolveQuestion(sessionId: string, requestId: string, answers: Record<string, string>): boolean {
+    const session = this.activeSessions.get(sessionId);
+    if (!session) return false;
+    const pending = session.pendingQuestions.get(requestId);
+    if (!pending) return false;
+    pending.resolve(answers);
+    session.pendingQuestions.delete(requestId);
+    return true;
+  }
+
+  /**
+   * Build a canUseTool callback for a session.
+   * Intercepts AskUserQuestion to broadcast to WS clients and wait for user answer.
+   */
+  private makeCanUseTool(session: ActiveSession): CanUseTool {
+    return async (toolName, input, _options) => {
+      if (toolName === "AskUserQuestion") {
+        const requestId = randomUUID();
+        const questions = (input.questions ?? []) as AskUserQuestionItem[];
+
+        // Broadcast question to all connected WS clients
+        this.broadcast(session, "ask_user_question", { requestId, questions });
+
+        // Wait for the user to answer
+        const answers = await new Promise<Record<string, string>>((resolve) => {
+          session.pendingQuestions.set(requestId, { input, resolve });
+        });
+
+        return {
+          behavior: "allow" as const,
+          updatedInput: {
+            questions: input.questions,
+            answers,
+          },
+        };
+      }
+
+      // All other tools: allow (bypassPermissions handles the rest)
+      return { behavior: "allow" as const };
+    };
   }
 
   private sendWS(ws: WebSocket, event: string, data: unknown): void {

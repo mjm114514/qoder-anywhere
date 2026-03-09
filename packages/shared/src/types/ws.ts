@@ -1,10 +1,31 @@
 // ── Client → Server ──
 
-export type WSClientMessage = WSMessageSend;
+export type WSClientMessage = WSMessageSend | WSAnswerQuestion;
 
 export interface WSMessageSend {
   type: "message";
   message: string;
+}
+
+export interface WSAnswerQuestion {
+  type: "answer_question";
+  requestId: string;
+  answers: Record<string, string>;
+}
+
+// ── AskUserQuestion types ──
+
+export interface AskUserQuestionOption {
+  label: string;
+  description: string;
+  preview?: string;
+}
+
+export interface AskUserQuestionItem {
+  question: string;
+  header: string;
+  options: AskUserQuestionOption[];
+  multiSelect: boolean;
 }
 
 // ── Server → Client ──
@@ -17,7 +38,8 @@ export type WSServerMessage =
   | WSResultMessage
   | WSToolProgressMessage
   | WSStatusMessage
-  | WSErrorMessage;
+  | WSErrorMessage
+  | WSAskUserQuestionMessage;
 
 export interface WSInitMessage {
   event: "init";
@@ -84,6 +106,14 @@ export interface WSErrorMessage {
   data: {
     error: string;
     code: string;
+  };
+}
+
+export interface WSAskUserQuestionMessage {
+  event: "ask_user_question";
+  data: {
+    requestId: string;
+    questions: AskUserQuestionItem[];
   };
 }
 

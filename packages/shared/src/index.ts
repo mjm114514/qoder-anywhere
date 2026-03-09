@@ -28,6 +28,9 @@ export type {
 export type {
   WSClientMessage,
   WSMessageSend,
+  WSAnswerQuestion,
+  AskUserQuestionOption,
+  AskUserQuestionItem,
   WSServerMessage,
   WSInitMessage,
   WSAssistantMessage,
@@ -37,6 +40,7 @@ export type {
   WSToolProgressMessage,
   WSStatusMessage,
   WSErrorMessage,
+  WSAskUserQuestionMessage,
   WSSyncMessage,
   WSSessionStateChange,
 } from "./types/ws.js";
