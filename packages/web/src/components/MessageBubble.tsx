@@ -140,22 +140,27 @@ function TimelineItem({
     return <SubagentBlock task={item.task} result={item.result} cwd={cwd} />;
   }
 
-  return <ToolBlock item={item} cwd={cwd} />;
+  return <ToolBlock item={item} isInProgress={isStreaming} cwd={cwd} />;
 }
 
 function ToolBlock({
   item,
+  isInProgress,
   cwd,
 }: {
   item: TimelineEntry & { type: "tool" };
+  isInProgress: boolean;
   cwd?: string;
 }) {
   const [expanded, setExpanded] = useState(false);
   const inputSummary = formatToolInput(item.name, item.input, cwd);
+  const inProgress = isInProgress && !item.result;
 
   return (
     <div className="timeline-item">
-      <div className="timeline-dot timeline-dot--tool" />
+      <div
+        className={`timeline-dot ${inProgress ? "timeline-dot--tool-running" : "timeline-dot--tool"}`}
+      />
       <div className="timeline-content">
         <div className="tool-header" onClick={() => setExpanded(!expanded)}>
           <span className="tool-name">{item.name}</span>
@@ -212,14 +217,17 @@ function SubagentBlock({
   // Build inner timeline items for expandable view
   const innerItems = buildTimelineItems(task.innerBlocks);
 
+  const dotClass = isFailed
+    ? "timeline-dot--subagent-failed"
+    : isRunning
+      ? "timeline-dot--subagent-running"
+      : "timeline-dot--subagent-done";
+
   return (
     <div className="timeline-item">
-      <div className="timeline-dot timeline-dot--subagent" />
+      <div className={`timeline-dot timeline-dot--subagent ${dotClass}`} />
       <div className="timeline-content">
         <div className="subagent-header" onClick={() => setExpanded(!expanded)}>
-          <span
-            className={`subagent-status-icon ${isFailed ? "subagent-status-icon--failed" : isRunning ? "subagent-status-icon--running" : "subagent-status-icon--done"}`}
-          />
           <span className="subagent-label">Agent</span>
           <span className="subagent-description">{task.description}</span>
           {isRunning && task.lastToolName && (
@@ -272,19 +280,14 @@ function ToolResult({ content }: { content: string }) {
   const display = expanded ? content : content.slice(0, 200);
 
   return (
-    <div className="tool-result">
+    <div
+      className={`tool-result ${truncated ? "tool-result--clickable" : ""}`}
+      onClick={() => truncated && setExpanded(!expanded)}
+    >
       <pre>
         {display}
         {truncated && !expanded && "..."}
       </pre>
-      {truncated && (
-        <button
-          className="tool-result-toggle"
-          onClick={() => setExpanded(!expanded)}
-        >
-          {expanded ? "Show less" : "Show more"}
-        </button>
-      )}
     </div>
   );
 }

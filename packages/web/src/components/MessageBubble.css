@@ -42,6 +42,11 @@
   background: #4caf50;
 }
 
+.timeline-dot--tool-running {
+  background: #f9a825;
+  animation: pulse 1.5s ease-in-out infinite;
+}
+
 .timeline-content {
   flex: 1;
   min-width: 0;
@@ -180,6 +185,16 @@
   }
 }
 
+@keyframes pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.3;
+  }
+}
+
 /* ── Tool block ── */
 .tool-header {
   display: flex;
@@ -247,6 +262,15 @@
   margin-top: 4px;
 }
 
+.tool-result--clickable {
+  cursor: pointer;
+}
+
+.tool-result--clickable:hover pre {
+  background: #f0f0f0;
+  border-color: #ddd;
+}
+
 .tool-result pre {
   margin: 0;
   padding: 8px 12px;
@@ -261,28 +285,29 @@
   word-break: break-word;
   font-family:
     "SF Mono", "Fira Code", "Fira Mono", "Roboto Mono", "Consolas", monospace;
-}
-
-.tool-result-toggle {
-  margin-top: 2px;
-  padding: 0;
-  border: none;
-  background: none;
-  color: #1976d2;
-  font-size: 12px;
-  cursor: pointer;
-}
-
-.tool-result-toggle:hover {
-  text-decoration: underline;
+  transition:
+    background 0.15s ease,
+    border-color 0.15s ease;
 }
 
 /* ── Subagent block ── */
 .timeline-dot--subagent {
-  background: #1a1a1a;
   width: 10px;
   height: 10px;
   margin-top: 6px;
+}
+
+.timeline-dot--subagent-done {
+  background: #4caf50;
+}
+
+.timeline-dot--subagent-failed {
+  background: #e53935;
+}
+
+.timeline-dot--subagent-running {
+  background: #f9a825;
+  animation: pulse 1.5s ease-in-out infinite;
 }
 
 .subagent-header {
@@ -297,36 +322,6 @@
 
 .subagent-header:hover {
   opacity: 0.8;
-}
-
-.subagent-status-icon {
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  flex-shrink: 0;
-}
-
-.subagent-status-icon--done {
-  background: #4caf50;
-}
-
-.subagent-status-icon--failed {
-  background: #e53935;
-}
-
-.subagent-status-icon--running {
-  background: #999;
-  animation: pulse 1.5s ease-in-out infinite;
-}
-
-@keyframes pulse {
-  0%,
-  100% {
-    opacity: 1;
-  }
-  50% {
-    opacity: 0.3;
-  }
 }
 
 .subagent-label {
