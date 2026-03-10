@@ -1,3 +1,5 @@
+import type { SDKMessage } from "@anthropic-ai/claude-agent-sdk";
+
 // ── Client → Server ──
 
 export type WSClientMessage = WSMessageSend | WSAnswerQuestion;
@@ -28,167 +30,62 @@ export interface AskUserQuestionItem {
   multiSelect: boolean;
 }
 
-// ── Server → Client ──
+// ── Server → Client: Two-category envelope ──
+//
+// 1. "sdk"     — raw SDK messages forwarded verbatim (no translation)
+// 2. "control" — server-originated messages (session_message, ask_user_question, etc.)
 
-export type WSServerMessage =
-  | WSInitMessage
-  | WSSessionMessage
-  | WSAssistantMessage
-  | WSStreamEventMessage
-  | WSToolResultMessage
-  | WSResultMessage
-  | WSToolProgressMessage
-  | WSStatusMessage
-  | WSErrorMessage
-  | WSAskUserQuestionMessage
-  | WSHistoryBatchStart
-  | WSHistoryBatchEnd
-  | WSTodoUpdateMessage
-  | WSTaskStartedMessage
-  | WSTaskProgressMessage
-  | WSTaskNotificationMessage;
-
-export interface WSInitMessage {
-  event: "init";
-  data: {
-    sessionId: string;
-    cwd: string;
-    model: string;
-  };
+export interface WSSdkMessage {
+  category: "sdk";
+  message: SDKMessage;
 }
 
-export interface WSSessionMessage {
-  event: "session_message";
-  data: {
-    message: string;
-  };
+export interface WSControlMessage {
+  category: "control";
+  message: ControlPayload;
 }
 
-export interface WSAssistantMessage {
-  event: "assistant";
-  data: {
-    type: "assistant";
-    uuid: string;
-    message: unknown;
-    parent_tool_use_id: string | null;
-  };
+export type WSServerMessage = WSSdkMessage | WSControlMessage;
+
+// ── Control payload discriminated union ──
+
+export type ControlPayload =
+  | ControlSessionMessage
+  | ControlAskUserQuestion
+  | ControlError
+  | ControlHistoryBatchStart
+  | ControlHistoryBatchEnd
+  | ControlTodoUpdate;
+
+export interface ControlSessionMessage {
+  type: "session_message";
+  message: string;
 }
 
-export interface WSStreamEventMessage {
-  event: "stream_event";
-  data: {
-    type: "stream_event";
-    event: unknown;
-    parent_tool_use_id: string | null;
-  };
+export interface ControlAskUserQuestion {
+  type: "ask_user_question";
+  requestId: string;
+  questions: AskUserQuestionItem[];
 }
 
-export interface WSToolResultMessage {
-  event: "tool_result";
-  data: {
-    type: "user";
-    uuid?: string;
-    message: unknown;
-    tool_use_result?: unknown;
-    parent_tool_use_id: string | null;
-  };
+export interface ControlError {
+  type: "error";
+  error: string;
+  code: string;
 }
 
-export interface WSResultMessage {
-  event: "result";
-  data: {
-    subtype: string;
-    result?: string;
-    session_id: string;
-    total_cost_usd: number;
-    duration_ms: number;
-    num_turns: number;
-    errors?: string[];
-  };
+export interface ControlHistoryBatchStart {
+  type: "history_batch_start";
+  messageCount: number;
 }
 
-export interface WSToolProgressMessage {
-  event: "tool_progress";
-  data: unknown;
+export interface ControlHistoryBatchEnd {
+  type: "history_batch_end";
 }
 
-export interface WSStatusMessage {
-  event: "status";
-  data: unknown;
-}
-
-export interface WSErrorMessage {
-  event: "error";
-  data: {
-    error: string;
-    code: string;
-  };
-}
-
-export interface WSAskUserQuestionMessage {
-  event: "ask_user_question";
-  data: {
-    requestId: string;
-    questions: AskUserQuestionItem[];
-  };
-}
-
-export interface WSHistoryBatchStart {
-  event: "history_batch_start";
-  data: { messageCount: number };
-}
-
-export interface WSHistoryBatchEnd {
-  event: "history_batch_end";
-  data: Record<string, never>;
-}
-
-export interface WSTodoUpdateMessage {
-  event: "todo_update";
-  data: { todos: import("./todo.js").TodoItem[] };
-}
-
-// ── Subagent task events ──
-
-export interface WSTaskStartedMessage {
-  event: "task_started";
-  data: {
-    task_id: string;
-    tool_use_id: string;
-    description: string;
-    task_type?: string;
-    prompt?: string;
-  };
-}
-
-export interface WSTaskProgressMessage {
-  event: "task_progress";
-  data: {
-    task_id: string;
-    tool_use_id: string;
-    description: string;
-    usage: {
-      total_tokens: number;
-      tool_uses: number;
-      duration_ms: number;
-    };
-    last_tool_name?: string;
-  };
-}
-
-export interface WSTaskNotificationMessage {
-  event: "task_notification";
-  data: {
-    task_id: string;
-    tool_use_id: string;
-    status: "completed" | "failed" | "stopped";
-    summary: string;
-    usage?: {
-      total_tokens: number;
-      tool_uses: number;
-      duration_ms: number;
-    };
-  };
+export interface ControlTodoUpdate {
+  type: "todo_update";
+  todos: import("./todo.js").TodoItem[];
 }
 
 // ── Global sync WebSocket: Server → Client ──

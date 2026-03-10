@@ -1,9 +1,11 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import type {
   WSServerMessage,
+  ControlPayload,
   AskUserQuestionItem,
   TodoItem,
 } from "@lgtm-anywhere/shared";
+import type { SDKMessage } from "@anthropic-ai/claude-agent-sdk";
 
 // ── Subagent state ──
 
@@ -146,36 +148,19 @@ export function useSessionSocket(
     [],
   );
 
-  useEffect(() => {
-    if (!sessionId) {
-      wsRef.current?.close();
-      wsRef.current = null;
-      return;
-    }
+  // ── SDK message handler ──
 
-    const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
-    const ws = new WebSocket(
-      `${protocol}//${window.location.host}/ws/sessions/${sessionId}`,
-    );
-    wsRef.current = ws;
-
-    ws.onmessage = (ev) => {
-      let msg: WSServerMessage;
-      try {
-        msg = JSON.parse(ev.data);
-      } catch {
-        return;
-      }
-
-      switch (msg.event) {
+  const handleSdkMessage = useCallback(
+    (sdk: SDKMessage) => {
+      switch (sdk.type) {
         case "assistant": {
-          const parentToolUseId = msg.data.parent_tool_use_id;
+          const parentToolUseId = sdk.parent_tool_use_id;
 
           if (parentToolUseId) {
             // Inner subagent message — fold into subagent's innerBlocks
             const subagent = subagentMapRef.current.get(parentToolUseId);
             if (subagent) {
-              const innerContentBlocks = extractBlocks(msg.data.message);
+              const innerContentBlocks = extractBlocks(sdk.message);
               subagent.innerBlocks.push(...innerContentBlocks);
               updateSubagentInMessages(parentToolUseId);
             }
@@ -183,7 +168,7 @@ export function useSessionSocket(
           }
 
           // Top-level assistant message
-          const blocks = extractBlocks(msg.data.message);
+          const blocks = extractBlocks(sdk.message);
 
           // Detect Agent tool_use blocks and create subagent entries
           const finalBlocks: ContentBlock[] = [];
@@ -228,7 +213,7 @@ export function useSessionSocket(
             return [
               ...filtered,
               {
-                id: msg.data.uuid,
+                id: sdk.uuid,
                 role: "assistant",
                 content: text,
                 blocks: finalBlocks,
@@ -240,12 +225,12 @@ export function useSessionSocket(
         }
 
         case "stream_event": {
-          const parentToolUseId = msg.data.parent_tool_use_id;
+          const parentToolUseId = sdk.parent_tool_use_id;
 
           // Skip subagent streaming text — don't show in main view
           if (parentToolUseId) break;
 
-          const sEvent = msg.data.event as Record<string, unknown>;
+          const sEvent = sdk.event as Record<string, unknown>;
           if (sEvent.type === "content_block_delta") {
             const delta = sEvent.delta as Record<string, unknown> | undefined;
             if (
@@ -280,109 +265,127 @@ export function useSessionSocket(
           break;
         }
 
-        case "tool_result": {
-          const parentToolUseId = msg.data.parent_tool_use_id;
+        case "user": {
+          // Only tool results reach the client (server filters non-tool-result user messages)
+          const toolResult = extractToolResultBlock(sdk.message);
+          if (!toolResult) break;
+
+          const parentToolUseId = sdk.parent_tool_use_id;
 
           if (parentToolUseId) {
             // Inner subagent tool result — fold into subagent's innerBlocks
             const subagent = subagentMapRef.current.get(parentToolUseId);
             if (subagent) {
-              const toolResult = extractToolResultBlock(msg.data.message);
-              if (toolResult) {
-                subagent.innerBlocks.push(toolResult);
-                updateSubagentInMessages(parentToolUseId);
-              }
+              subagent.innerBlocks.push(toolResult);
+              updateSubagentInMessages(parentToolUseId);
             }
             break;
           }
 
-          // Top-level tool result
-          const toolResult = extractToolResultBlock(msg.data.message);
-          if (toolResult) {
-            // Check if this tool_result is for an Agent tool_use (subagent completion fallback)
-            const subagent = subagentMapRef.current.get(toolResult.toolUseId);
-            if (subagent && subagent.status === "running") {
-              // Update subagent status — the Agent tool returned
-              subagent.status = "completed";
-              subagent.result = toolResult.content || undefined;
-              if (!subagent.summary) {
-                subagent.summary = toolResult.content
-                  ? truncateString(toolResult.content, 500)
-                  : "Completed";
-              }
-              updateSubagentInMessages(toolResult.toolUseId);
-              break;
+          // Check if this tool_result is for an Agent tool_use (subagent completion fallback)
+          const subagent = subagentMapRef.current.get(toolResult.toolUseId);
+          if (subagent && subagent.status === "running") {
+            // Update subagent status — the Agent tool returned
+            subagent.status = "completed";
+            subagent.result = toolResult.content || undefined;
+            if (!subagent.summary) {
+              subagent.summary = toolResult.content
+                ? truncateString(toolResult.content, 500)
+                : "Completed";
             }
+            updateSubagentInMessages(toolResult.toolUseId);
+            break;
+          }
 
-            // Normal tool_result — attach to the last assistant message's matching tool_use
-            setMessages((prev) => {
-              const next = [...prev];
-              // Walk backwards to find the assistant message containing this tool_use
-              for (let i = next.length - 1; i >= 0; i--) {
-                const m = next[i];
-                if (m.role === "assistant") {
-                  const hasToolUse = m.blocks.some(
-                    (b) =>
-                      b.type === "tool_use" &&
-                      b.toolUseId === toolResult.toolUseId,
-                  );
-                  if (hasToolUse) {
-                    next[i] = {
-                      ...m,
-                      blocks: [...m.blocks, toolResult],
-                    };
-                    return next;
-                  }
+          // Normal tool_result — attach to the last assistant message's matching tool_use
+          setMessages((prev) => {
+            const next = [...prev];
+            // Walk backwards to find the assistant message containing this tool_use
+            for (let i = next.length - 1; i >= 0; i--) {
+              const m = next[i];
+              if (m.role === "assistant") {
+                const hasToolUse = m.blocks.some(
+                  (b) =>
+                    b.type === "tool_use" &&
+                    b.toolUseId === toolResult.toolUseId,
+                );
+                if (hasToolUse) {
+                  next[i] = {
+                    ...m,
+                    blocks: [...m.blocks, toolResult],
+                  };
+                  return next;
                 }
               }
-              // Fallback: couldn't match — append as standalone
-              return [
-                ...prev,
-                {
-                  id: msg.data.uuid ?? `tr-${Date.now()}`,
-                  role: "assistant",
-                  content: "",
-                  blocks: [toolResult],
-                },
-              ];
-            });
-          }
-          break;
-        }
-
-        case "task_started": {
-          const { task_id, tool_use_id, description, prompt } = msg.data;
-          const subagent = getOrCreateSubagent(tool_use_id, {
-            taskId: task_id,
-            description,
-            prompt,
+            }
+            // Fallback: couldn't match — append as standalone
+            return [
+              ...prev,
+              {
+                id: sdk.uuid ?? `tr-${Date.now()}`,
+                role: "assistant",
+                content: "",
+                blocks: [toolResult],
+              },
+            ];
           });
-          subagent.taskId = task_id;
-          if (description) subagent.description = description;
-          if (prompt) subagent.prompt = prompt;
-          updateSubagentInMessages(tool_use_id);
           break;
         }
 
-        case "task_progress": {
-          const { tool_use_id, usage, last_tool_name } = msg.data;
-          const subagent = subagentMapRef.current.get(tool_use_id);
-          if (subagent) {
-            subagent.usage = usage;
-            if (last_tool_name) subagent.lastToolName = last_tool_name;
-            updateSubagentInMessages(tool_use_id);
-          }
-          break;
-        }
+        case "system": {
+          const subtype = "subtype" in sdk ? sdk.subtype : undefined;
 
-        case "task_notification": {
-          const { tool_use_id, status, summary, usage } = msg.data;
-          const subagent = subagentMapRef.current.get(tool_use_id);
-          if (subagent) {
-            subagent.status = status;
-            subagent.summary = summary;
-            if (usage) subagent.usage = usage;
-            updateSubagentInMessages(tool_use_id);
+          if (subtype === "task_started") {
+            const msg = sdk as unknown as {
+              task_id: string;
+              tool_use_id: string;
+              description: string;
+              prompt?: string;
+            };
+            const subagent = getOrCreateSubagent(msg.tool_use_id, {
+              taskId: msg.task_id,
+              description: msg.description,
+              prompt: msg.prompt,
+            });
+            subagent.taskId = msg.task_id;
+            if (msg.description) subagent.description = msg.description;
+            if (msg.prompt) subagent.prompt = msg.prompt;
+            updateSubagentInMessages(msg.tool_use_id);
+          } else if (subtype === "task_progress") {
+            const msg = sdk as unknown as {
+              tool_use_id: string;
+              usage: {
+                total_tokens: number;
+                tool_uses: number;
+                duration_ms: number;
+              };
+              last_tool_name?: string;
+            };
+            const subagent = subagentMapRef.current.get(msg.tool_use_id);
+            if (subagent) {
+              subagent.usage = msg.usage;
+              if (msg.last_tool_name)
+                subagent.lastToolName = msg.last_tool_name;
+              updateSubagentInMessages(msg.tool_use_id);
+            }
+          } else if (subtype === "task_notification") {
+            const msg = sdk as unknown as {
+              tool_use_id: string;
+              status: "completed" | "failed" | "stopped";
+              summary: string;
+              usage?: {
+                total_tokens: number;
+                tool_uses: number;
+                duration_ms: number;
+              };
+            };
+            const subagent = subagentMapRef.current.get(msg.tool_use_id);
+            if (subagent) {
+              subagent.status = msg.status;
+              subagent.summary = msg.summary;
+              if (msg.usage) subagent.usage = msg.usage;
+              updateSubagentInMessages(msg.tool_use_id);
+            }
           }
           break;
         }
@@ -393,57 +396,93 @@ export function useSessionSocket(
           setPendingQuestion(null);
           break;
         }
+      }
+    },
+    [getOrCreateSubagent, updateSubagentInMessages],
+  );
 
-        case "ask_user_question": {
-          setPendingQuestion({
-            requestId: msg.data.requestId,
-            questions: msg.data.questions,
-          });
-          break;
-        }
+  // ── Control message handler ──
 
-        case "error": {
-          setError(msg.data.error);
-          setIsStreaming(false);
-          streamBufRef.current = null;
-          break;
+  const handleControlMessage = useCallback((ctrl: ControlPayload) => {
+    switch (ctrl.type) {
+      case "session_message": {
+        const text = ctrl.message;
+        setMessages((prev) => [
+          ...prev,
+          {
+            id: `user-${Date.now()}-${Math.random().toString(36).slice(2)}`,
+            role: "user",
+            content: text,
+            blocks: [{ type: "text", text }],
+          },
+        ]);
+        if (!isLoadingHistoryRef.current) {
+          setIsStreaming(true);
         }
+        break;
+      }
 
-        case "session_message": {
-          const text = msg.data.message;
-          setMessages((prev) => [
-            ...prev,
-            {
-              id: `user-${Date.now()}-${Math.random().toString(36).slice(2)}`,
-              role: "user",
-              content: text,
-              blocks: [{ type: "text", text }],
-            },
-          ]);
-          if (!isLoadingHistoryRef.current) {
-            setIsStreaming(true);
-          }
-          break;
-        }
+      case "ask_user_question": {
+        setPendingQuestion({
+          requestId: ctrl.requestId,
+          questions: ctrl.questions,
+        });
+        break;
+      }
 
-        case "history_batch_start": {
-          isLoadingHistoryRef.current = true;
-          setIsLoadingHistory(true);
-          setMessages([]);
-          subagentMapRef.current = new Map();
-          break;
-        }
+      case "error": {
+        setError(ctrl.error);
+        setIsStreaming(false);
+        streamBufRef.current = null;
+        break;
+      }
 
-        case "history_batch_end": {
-          isLoadingHistoryRef.current = false;
-          setIsLoadingHistory(false);
-          break;
-        }
+      case "history_batch_start": {
+        isLoadingHistoryRef.current = true;
+        setIsLoadingHistory(true);
+        setMessages([]);
+        subagentMapRef.current = new Map();
+        break;
+      }
 
-        case "todo_update": {
-          setTodos(msg.data.todos);
-          break;
-        }
+      case "history_batch_end": {
+        isLoadingHistoryRef.current = false;
+        setIsLoadingHistory(false);
+        break;
+      }
+
+      case "todo_update": {
+        setTodos(ctrl.todos);
+        break;
+      }
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!sessionId) {
+      wsRef.current?.close();
+      wsRef.current = null;
+      return;
+    }
+
+    const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
+    const ws = new WebSocket(
+      `${protocol}//${window.location.host}/ws/sessions/${sessionId}`,
+    );
+    wsRef.current = ws;
+
+    ws.onmessage = (ev) => {
+      let msg: WSServerMessage;
+      try {
+        msg = JSON.parse(ev.data);
+      } catch {
+        return;
+      }
+
+      if (msg.category === "sdk") {
+        handleSdkMessage(msg.message);
+      } else {
+        handleControlMessage(msg.message);
       }
     };
 
@@ -459,7 +498,7 @@ export function useSessionSocket(
       ws.close();
       wsRef.current = null;
     };
-  }, [sessionId, getOrCreateSubagent, updateSubagentInMessages]);
+  }, [sessionId, handleSdkMessage, handleControlMessage]);
 
   const sendMessage = useCallback((text: string) => {
     if (!wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) return;

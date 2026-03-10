@@ -1,12 +1,34 @@
 import { WebSocketServer, type WebSocket } from "ws";
 import type { IncomingMessage } from "node:http";
 import type { Server } from "node:http";
-import type { WSClientMessage, SessionState } from "@lgtm-anywhere/shared";
+import type {
+  WSClientMessage,
+  SessionState,
+  WSServerMessage,
+  ControlPayload,
+} from "@lgtm-anywhere/shared";
 import { listSessions } from "@anthropic-ai/claude-agent-sdk";
 import { SessionManager } from "../services/session-manager.js";
 
 const WS_PATH_RE = /^\/ws\/sessions\/([^/]+)$/;
 const WS_SYNC_PATH_RE = /^\/ws\/sync$/;
+
+/** Build a control WSServerMessage. */
+function controlMsg(message: ControlPayload): WSServerMessage {
+  return { category: "control", message };
+}
+
+function sendError(ws: WebSocket, error: string, code: string): void {
+  if (ws.readyState === ws.OPEN) {
+    ws.send(JSON.stringify(controlMsg({ type: "error", error, code })));
+  }
+}
+
+function sendWS(ws: WebSocket, msg: WSServerMessage): void {
+  if (ws.readyState === ws.OPEN) {
+    ws.send(JSON.stringify(msg));
+  }
+}
 
 export function attachWebSocket(
   server: Server,
@@ -66,18 +88,6 @@ export function attachWebSocket(
   });
 }
 
-function sendError(ws: WebSocket, error: string, code: string): void {
-  if (ws.readyState === ws.OPEN) {
-    ws.send(JSON.stringify({ event: "error", data: { error, code } }));
-  }
-}
-
-function sendWS(ws: WebSocket, event: string, data: unknown): void {
-  if (ws.readyState === ws.OPEN) {
-    ws.send(JSON.stringify({ event, data }));
-  }
-}
-
 async function handleConnection(
   ws: WebSocket,
   sessionId: string,
@@ -91,11 +101,17 @@ async function handleConnection(
     try {
       const historyEvents =
         await sessionManager.convertHistoryToWSEvents(sessionId);
-      sendWS(ws, "history_batch_start", { messageCount: historyEvents.length });
+      sendWS(
+        ws,
+        controlMsg({
+          type: "history_batch_start",
+          messageCount: historyEvents.length,
+        }),
+      );
       for (const evt of historyEvents) {
-        sendWS(ws, evt.event, evt.data);
+        sendWS(ws, evt);
       }
-      sendWS(ws, "history_batch_end", {});
+      sendWS(ws, controlMsg({ type: "history_batch_end" }));
     } catch {
       sendError(ws, "Failed to load session history", "HISTORY_ERROR");
     }

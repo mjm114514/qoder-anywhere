@@ -4,15 +4,9 @@ import {
   type Query,
   type SDKMessage,
   type CanUseTool,
-  type SDKSystemMessage,
   type SDKAssistantMessage,
-  type SDKPartialAssistantMessage,
   type SDKUserMessage,
   type SDKUserMessageReplay,
-  type SDKResultMessage,
-  type SDKTaskStartedMessage,
-  type SDKTaskProgressMessage,
-  type SDKTaskNotificationMessage,
   type PermissionMode,
 } from "@anthropic-ai/claude-agent-sdk";
 import { EventEmitter } from "node:events";
@@ -22,9 +16,70 @@ import type {
   SessionState,
   AskUserQuestionItem,
   TodoItem,
+  WSServerMessage,
+  WSSdkMessage,
+  WSControlMessage,
+  ControlPayload,
 } from "@lgtm-anywhere/shared";
 import { config } from "../config.js";
 import { MessageQueue } from "./message-queue.js";
+
+// ── Envelope helpers ──
+
+function sdkMsg(message: SDKMessage): WSSdkMessage {
+  return { category: "sdk", message };
+}
+
+function controlMsg(message: ControlPayload): WSControlMessage {
+  return { category: "control", message };
+}
+
+/**
+ * Extract the effective "kind" of an SDK message in the cache.
+ * For system messages, returns the subtype (e.g., "init", "task_started").
+ * For other SDK messages, returns the type (e.g., "assistant", "stream_event").
+ * Returns null for control messages.
+ */
+function sdkMessageKind(entry: WSServerMessage): string | null {
+  if (entry.category !== "sdk") return null;
+  const m = entry.message;
+  if (m.type === "system" && "subtype" in m) return m.subtype as string;
+  return m.type;
+}
+
+/**
+ * Determine whether an SDK message should be forwarded (cached + broadcast).
+ * Returns false for messages we intentionally drop or handle separately.
+ */
+function shouldForwardSdkMessage(message: SDKMessage): boolean {
+  switch (message.type) {
+    case "system": {
+      const sub = "subtype" in message ? message.subtype : undefined;
+      if (sub === "init") return true;
+      if (sub === "status") return false; // transient — handled separately
+      if (
+        sub === "task_started" ||
+        sub === "task_progress" ||
+        sub === "task_notification"
+      ) {
+        // Only forward task messages that have a tool_use_id (subagent tasks)
+        return !!(message as { tool_use_id?: string }).tool_use_id;
+      }
+      return false;
+    }
+    case "assistant":
+    case "stream_event":
+    case "tool_progress":
+    case "result":
+      return true;
+    case "user": {
+      const userMsg = message as SDKUserMessage | SDKUserMessageReplay;
+      return userMsg.tool_use_result !== undefined;
+    }
+    default:
+      return false;
+  }
+}
 
 export interface ActiveSession {
   sessionId: string;
@@ -49,8 +104,8 @@ export interface ActiveSession {
       resolve: (answers: Record<string, string>) => void;
     }
   >;
-  /** Full cache of WS events (history + runtime) for the session lifetime */
-  messageCache: Array<{ event: string; data: unknown }>;
+  /** Full cache of WS messages (history + runtime) for the session lifetime */
+  messageCache: WSServerMessage[];
   /** Current todo list maintained via TodoWrite tool interceptions */
   currentTodos: TodoItem[];
 }
@@ -167,10 +222,9 @@ export class SessionManager extends EventEmitter {
     session.messageQueue.push(options.message);
 
     // Cache the first user message (not yet persisted)
-    session.messageCache.push({
-      event: "session_message",
-      data: { message: options.message },
-    });
+    session.messageCache.push(
+      controlMsg({ type: "session_message", message: options.message }),
+    );
 
     // Start consuming messages in the background (handles init + ongoing)
     this.runSession(session, q);
@@ -195,9 +249,9 @@ export class SessionManager extends EventEmitter {
     }
 
     // Cache and broadcast the user message (not yet persisted by SDK).
-    const pending = { event: "session_message", data: { message } };
+    const pending = controlMsg({ type: "session_message", message });
     session.messageCache.push(pending);
-    this.broadcast(session, pending.event, pending.data);
+    this.broadcast(session, pending);
 
     session.state = "active";
     session.lastActivityAt = Date.now();
@@ -274,13 +328,17 @@ export class SessionManager extends EventEmitter {
     if (!session) return false;
 
     // Replay cached messages wrapped in batch markers
-    this.sendWS(ws, "history_batch_start", {
-      messageCount: session.messageCache.length,
-    });
+    this.sendWS(
+      ws,
+      controlMsg({
+        type: "history_batch_start",
+        messageCount: session.messageCache.length,
+      }),
+    );
     for (const cached of session.messageCache) {
-      this.sendWS(ws, cached.event, cached.data);
+      this.sendWS(ws, cached);
     }
-    this.sendWS(ws, "history_batch_end", {});
+    this.sendWS(ws, controlMsg({ type: "history_batch_end" }));
 
     session.wsClients.add(ws);
     return true;
@@ -298,11 +356,13 @@ export class SessionManager extends EventEmitter {
     if (!session) return;
 
     // Close all WebSocket connections
+    const errMsg = controlMsg({
+      type: "error",
+      error: "Session stopped",
+      code: "SESSION_STOPPED",
+    });
     for (const ws of session.wsClients) {
-      this.sendWS(ws, "error", {
-        error: "Session stopped",
-        code: "SESSION_STOPPED",
-      });
+      this.sendWS(ws, errMsg);
       ws.close();
     }
     session.wsClients.clear();
@@ -344,26 +404,27 @@ export class SessionManager extends EventEmitter {
   }
 
   /**
-   * Convert persisted session messages from the SDK into WS events for replay.
+   * Convert persisted session messages from the SDK into WS messages for replay.
    */
   async convertHistoryToWSEvents(
     sessionId: string,
-  ): Promise<Array<{ event: string; data: unknown }>> {
+  ): Promise<WSServerMessage[]> {
     const messages = await getSessionMessages(sessionId, { limit: 1000 });
-    const events: Array<{ event: string; data: unknown }> = [];
+    const events: WSServerMessage[] = [];
     let lastTodos: TodoItem[] | null = null;
 
     for (const m of messages) {
       if (m.type === "assistant") {
-        events.push({
-          event: "assistant",
-          data: {
+        // Reconstruct as SDK-shaped message for passthrough
+        events.push(
+          sdkMsg({
             type: "assistant",
             uuid: m.uuid,
             message: m.message,
             parent_tool_use_id: m.parent_tool_use_id ?? null,
-          },
-        });
+            session_id: m.session_id ?? sessionId,
+          } as SDKAssistantMessage),
+        );
 
         // Scan assistant message content blocks for the last TodoWrite tool_use
         const msg = m.message as Record<string, unknown> | undefined;
@@ -381,22 +442,19 @@ export class SessionManager extends EventEmitter {
         }
       } else if (m.type === "user") {
         if (isToolResultMessage(m.message)) {
-          events.push({
-            event: "tool_result",
-            data: {
+          events.push(
+            sdkMsg({
               type: "user",
               uuid: m.uuid,
               message: m.message,
               parent_tool_use_id: m.parent_tool_use_id ?? null,
-            },
-          });
+              session_id: m.session_id ?? sessionId,
+            } as unknown as SDKUserMessage),
+          );
         } else {
           const text = extractUserText(m.message);
           if (text) {
-            events.push({
-              event: "session_message",
-              data: { message: text },
-            });
+            events.push(controlMsg({ type: "session_message", message: text }));
           }
         }
       }
@@ -404,7 +462,7 @@ export class SessionManager extends EventEmitter {
 
     // Append the last todo state so clients can restore the todo panel
     if (lastTodos) {
-      events.push({ event: "todo_update", data: { todos: lastTodos } });
+      events.push(controlMsg({ type: "todo_update", todos: lastTodos }));
     }
 
     return events;
@@ -421,12 +479,13 @@ export class SessionManager extends EventEmitter {
         const questions = (input.questions ?? []) as AskUserQuestionItem[];
 
         // Cache & broadcast question to all connected WS clients
-        const cached = {
-          event: "ask_user_question",
-          data: { requestId, questions },
-        };
+        const cached = controlMsg({
+          type: "ask_user_question",
+          requestId,
+          questions,
+        });
         session.messageCache.push(cached);
-        this.broadcast(session, cached.event, cached.data);
+        this.broadcast(session, cached);
 
         // Wait for the user to answer
         const answers = await new Promise<Record<string, string>>((resolve) => {
@@ -451,183 +510,46 @@ export class SessionManager extends EventEmitter {
     };
   }
 
-  private sendWS(ws: WebSocket, event: string, data: unknown): void {
+  private sendWS(ws: WebSocket, msg: WSServerMessage): void {
     if (ws.readyState === ws.OPEN) {
-      ws.send(JSON.stringify({ event, data }));
+      ws.send(JSON.stringify(msg));
     }
   }
 
-  private broadcast(
-    session: ActiveSession,
-    event: string,
-    data: unknown,
-  ): void {
-    const message = JSON.stringify({ event, data });
+  private broadcast(session: ActiveSession, msg: WSServerMessage): void {
+    const serialized = JSON.stringify(msg);
     for (const ws of session.wsClients) {
       if (ws.readyState === ws.OPEN) {
-        ws.send(message);
+        ws.send(serialized);
       }
     }
   }
 
   /**
-   * Remove all cached events of the given type from the cache.
+   * Remove all cached SDK messages of the given kind from the cache.
    * Called when a finalized message arrives that supersedes transient events
    * (e.g., stream_event deltas are superseded by the complete assistant message).
    */
-  private pruneCache(
-    cache: Array<{ event: string; data: unknown }>,
-    eventType: string,
-  ): void {
+  private pruneSdkMessages(cache: WSServerMessage[], kind: string): void {
     for (let i = cache.length - 2; i >= 0; i--) {
-      if (cache[i].event === eventType) {
+      if (sdkMessageKind(cache[i]) === kind) {
         cache.splice(i, 1);
       }
     }
   }
 
   /**
-   * Remove cached events matching a predicate.
+   * Remove cached SDK messages matching a predicate.
    * Used for targeted pruning (e.g., removing task_progress for a specific task_id).
    */
-  private pruneCacheByPredicate(
-    cache: Array<{ event: string; data: unknown }>,
-    predicate: (entry: { event: string; data: unknown }) => boolean,
+  private pruneSdkMessagesByPredicate(
+    cache: WSServerMessage[],
+    predicate: (entry: WSServerMessage) => boolean,
   ): void {
     for (let i = cache.length - 2; i >= 0; i--) {
       if (predicate(cache[i])) {
         cache.splice(i, 1);
       }
-    }
-  }
-
-  private mapMessageToEvent(
-    message: SDKMessage,
-  ): { event: string; data: unknown } | null {
-    switch (message.type) {
-      case "system":
-        if (message.subtype === "init") {
-          const initMsg = message as SDKSystemMessage;
-          return {
-            event: "init",
-            data: {
-              sessionId: initMsg.session_id,
-              cwd: initMsg.cwd,
-              model: initMsg.model,
-            },
-          };
-        }
-        if (message.subtype === "task_started") {
-          const taskMsg = message as SDKTaskStartedMessage;
-          if (!taskMsg.tool_use_id) return null;
-          return {
-            event: "task_started",
-            data: {
-              task_id: taskMsg.task_id,
-              tool_use_id: taskMsg.tool_use_id,
-              description: taskMsg.description,
-              task_type: taskMsg.task_type,
-              prompt: taskMsg.prompt,
-            },
-          };
-        }
-        if (message.subtype === "task_progress") {
-          const taskMsg = message as SDKTaskProgressMessage;
-          if (!taskMsg.tool_use_id) return null;
-          return {
-            event: "task_progress",
-            data: {
-              task_id: taskMsg.task_id,
-              tool_use_id: taskMsg.tool_use_id,
-              description: taskMsg.description,
-              usage: taskMsg.usage,
-              last_tool_name: taskMsg.last_tool_name,
-            },
-          };
-        }
-        if (message.subtype === "task_notification") {
-          const taskMsg = message as SDKTaskNotificationMessage;
-          if (!taskMsg.tool_use_id) return null;
-          return {
-            event: "task_notification",
-            data: {
-              task_id: taskMsg.task_id,
-              tool_use_id: taskMsg.tool_use_id,
-              status: taskMsg.status,
-              summary: taskMsg.summary,
-              usage: taskMsg.usage,
-            },
-          };
-        }
-        return null;
-
-      case "assistant": {
-        const assistantMsg = message as SDKAssistantMessage;
-        return {
-          event: "assistant",
-          data: {
-            type: "assistant",
-            uuid: assistantMsg.uuid,
-            message: assistantMsg.message,
-            parent_tool_use_id: assistantMsg.parent_tool_use_id,
-          },
-        };
-      }
-
-      case "stream_event": {
-        const streamMsg = message as SDKPartialAssistantMessage;
-        return {
-          event: "stream_event",
-          data: {
-            type: "stream_event",
-            event: streamMsg.event,
-            parent_tool_use_id: streamMsg.parent_tool_use_id,
-          },
-        };
-      }
-
-      case "user": {
-        // Tool results
-        const userMsg = message as SDKUserMessage | SDKUserMessageReplay;
-        if (userMsg.tool_use_result !== undefined) {
-          return {
-            event: "tool_result",
-            data: {
-              type: "user",
-              uuid: userMsg.uuid,
-              message: userMsg.message,
-              tool_use_result: userMsg.tool_use_result,
-              parent_tool_use_id: userMsg.parent_tool_use_id,
-            },
-          };
-        }
-        return null;
-      }
-
-      case "result": {
-        const resultMsg = message as SDKResultMessage;
-        return {
-          event: "result",
-          data: {
-            subtype: resultMsg.subtype,
-            result:
-              resultMsg.subtype === "success" ? resultMsg.result : undefined,
-            session_id: resultMsg.session_id,
-            total_cost_usd: resultMsg.total_cost_usd,
-            duration_ms: resultMsg.duration_ms,
-            num_turns: resultMsg.num_turns,
-            errors:
-              resultMsg.subtype !== "success" ? resultMsg.errors : undefined,
-          },
-        };
-      }
-
-      case "tool_progress": {
-        return { event: "tool_progress", data: message };
-      }
-
-      default:
-        return null;
     }
   }
 
@@ -667,37 +589,49 @@ export class SessionManager extends EventEmitter {
           "subtype" in message &&
           message.subtype === "status"
         ) {
-          this.broadcast(session, "status", message);
+          this.broadcast(session, sdkMsg(message));
+          continue;
         }
 
-        const mapped = this.mapMessageToEvent(message);
-        if (mapped) {
-          session.messageCache.push(mapped);
+        // Forward SDK messages that pass the filter
+        if (shouldForwardSdkMessage(message)) {
+          const wrapped = sdkMsg(message);
+          session.messageCache.push(wrapped);
 
           // When a complete assistant message arrives, remove preceding
           // stream_event chunks from cache — the assistant message contains
           // the final content, so streaming deltas are redundant for replay.
-          if (mapped.event === "assistant") {
-            this.pruneCache(session.messageCache, "stream_event");
+          if (message.type === "assistant") {
+            this.pruneSdkMessages(session.messageCache, "stream_event");
           }
 
           // When a tool_result arrives, remove preceding tool_progress
           // events — they are transient progress indicators.
-          if (mapped.event === "tool_result") {
-            this.pruneCache(session.messageCache, "tool_progress");
+          if (
+            message.type === "user" &&
+            (message as SDKUserMessage).tool_use_result !== undefined
+          ) {
+            this.pruneSdkMessages(session.messageCache, "tool_progress");
           }
 
           // When a task_notification arrives, prune preceding task_progress
           // events for the same task_id — they are superseded by the final notification.
-          if (mapped.event === "task_notification") {
-            const taskId = (mapped.data as { task_id: string }).task_id;
-            this.pruneCacheByPredicate(session.messageCache, (entry) => {
-              if (entry.event !== "task_progress") return false;
-              return (entry.data as { task_id: string }).task_id === taskId;
+          if (
+            message.type === "system" &&
+            "subtype" in message &&
+            message.subtype === "task_notification"
+          ) {
+            const taskId = (message as { task_id: string }).task_id;
+            this.pruneSdkMessagesByPredicate(session.messageCache, (entry) => {
+              if (sdkMessageKind(entry) !== "task_progress") return false;
+              return (
+                ((entry as WSSdkMessage).message as { task_id: string })
+                  .task_id === taskId
+              );
             });
           }
 
-          this.broadcast(session, mapped.event, mapped.data);
+          this.broadcast(session, wrapped);
         }
 
         // Extract TodoWrite calls from assistant messages.
@@ -707,12 +641,9 @@ export class SessionManager extends EventEmitter {
           const todos = extractTodosFromAssistant(message);
           if (todos) {
             session.currentTodos = todos;
-            const todoEvent = {
-              event: "todo_update" as const,
-              data: { todos },
-            };
-            session.messageCache.push(todoEvent);
-            this.broadcast(session, todoEvent.event, todoEvent.data);
+            const todoMsg = controlMsg({ type: "todo_update", todos });
+            session.messageCache.push(todoMsg);
+            this.broadcast(session, todoMsg);
           }
         }
 
@@ -728,10 +659,14 @@ export class SessionManager extends EventEmitter {
         }
       }
     } catch (err) {
-      this.broadcast(session, "error", {
-        error: err instanceof Error ? err.message : "Unknown error",
-        code: "QUERY_ERROR",
-      });
+      this.broadcast(
+        session,
+        controlMsg({
+          type: "error",
+          error: err instanceof Error ? err.message : "Unknown error",
+          code: "QUERY_ERROR",
+        }),
+      );
     }
 
     // Generator exited → process terminated
