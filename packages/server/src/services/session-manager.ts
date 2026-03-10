@@ -16,6 +16,7 @@ import type {
   SessionState,
   AskUserQuestionItem,
   TodoItem,
+  UserImageAttachment,
   WSServerMessage,
   WSSdkMessage,
   WSControlMessage,
@@ -128,6 +129,7 @@ export interface CreateSessionOptions {
   allowedTools?: string[];
   systemPrompt?: string;
   maxTurns?: number;
+  images?: UserImageAttachment[];
 }
 
 function makeSessionIdHook(): Pick<
@@ -234,11 +236,15 @@ export class SessionManager extends EventEmitter {
     session.query = q;
 
     // Push the first user message immediately
-    session.messageQueue.push(options.message);
+    session.messageQueue.push(options.message, options.images);
 
     // Cache the first user message (not yet persisted)
     session.messageCache.push(
-      controlMsg({ type: "session_message", message: options.message }),
+      controlMsg({
+        type: "session_message",
+        message: options.message,
+        ...(options.images?.length ? { images: options.images } : {}),
+      }),
     );
 
     // Start consuming messages in the background (handles init + ongoing)
@@ -252,19 +258,24 @@ export class SessionManager extends EventEmitter {
     sessionId: string,
     message: string,
     cwd: string,
+    images?: UserImageAttachment[],
   ): Promise<ActiveSession> {
     let session = this.activeSessions.get(sessionId);
 
     if (!session) {
       // Reactivate: waits for init, then pushes message
-      session = await this.reactivateSession(sessionId, cwd, message);
+      session = await this.reactivateSession(sessionId, cwd, message, images);
     } else {
       // Session already active/idle — transport is ready, safe to push
-      session.messageQueue.push(message);
+      session.messageQueue.push(message, images);
     }
 
     // Cache and broadcast the user message (not yet persisted by SDK).
-    const pending = controlMsg({ type: "session_message", message });
+    const pending = controlMsg({
+      type: "session_message",
+      message,
+      ...(images?.length ? { images } : {}),
+    });
     session.messageCache.push(pending);
     this.broadcast(session, pending);
 
@@ -282,6 +293,7 @@ export class SessionManager extends EventEmitter {
     sessionId: string,
     cwd: string,
     firstMessage: string,
+    images?: UserImageAttachment[],
   ): Promise<ActiveSession> {
     const messageQueue = new MessageQueue();
     const abortController = new AbortController();
@@ -332,7 +344,7 @@ export class SessionManager extends EventEmitter {
     session.messageCache = historyEvents;
 
     // Push the first message immediately (caching is handled by sendMessage)
-    session.messageQueue.push(firstMessage);
+    session.messageQueue.push(firstMessage, images);
 
     // Start consuming in the background (init will be handled inline)
     this.runSession(session, q);
@@ -547,8 +559,15 @@ export class SessionManager extends EventEmitter {
           );
         } else {
           const text = extractUserText(m.message);
-          if (text) {
-            events.push(controlMsg({ type: "session_message", message: text }));
+          const images = extractUserImages(m.message);
+          if (text || images.length > 0) {
+            events.push(
+              controlMsg({
+                type: "session_message",
+                message: text,
+                ...(images.length > 0 ? { images } : {}),
+              }),
+            );
           }
         }
       }
@@ -906,6 +925,33 @@ function extractUserText(message: unknown): string {
       .join("");
   }
   return "";
+}
+
+/** Extract base64 image attachments from a user message. */
+function extractUserImages(
+  message: unknown,
+): Array<{ media_type: string; data: string }> {
+  if (!message || typeof message !== "object") return [];
+  const msg = message as Record<string, unknown>;
+  if (!Array.isArray(msg.content)) return [];
+  const images: Array<{ media_type: string; data: string }> = [];
+  for (const block of msg.content as Array<Record<string, unknown>>) {
+    if (
+      block.type === "image" &&
+      block.source &&
+      typeof block.source === "object"
+    ) {
+      const src = block.source as Record<string, unknown>;
+      if (
+        src.type === "base64" &&
+        typeof src.media_type === "string" &&
+        typeof src.data === "string"
+      ) {
+        images.push({ media_type: src.media_type, data: src.data });
+      }
+    }
+  }
+  return images;
 }
 
 /**

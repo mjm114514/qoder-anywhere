@@ -40,6 +40,7 @@ export type {
   WSServerMessage,
   ControlPayload,
   ControlSessionMessage,
+  UserImageAttachment,
   ControlAskUserQuestion,
   ControlToolApprovalRequest,
   ControlPermissionModeChanged,

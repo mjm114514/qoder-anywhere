@@ -18,6 +18,18 @@ export function MessageBubble({ message, cwd }: MessageBubbleProps) {
     return (
       <div className="message-bubble message-bubble--user">
         <div className="message-bubble-content">{message.content}</div>
+        {message.images && message.images.length > 0 && (
+          <div className="message-bubble-images">
+            {message.images.map((img, i) => (
+              <img
+                key={i}
+                src={`data:${img.media_type};base64,${img.data}`}
+                alt={`Attachment ${i + 1}`}
+                className="message-bubble-image"
+              />
+            ))}
+          </div>
+        )}
       </div>
     );
   }
@@ -90,8 +102,6 @@ function buildTimelineItems(blocks: ContentBlock[]): TimelineEntry[] {
         items.push({ type: "text", text: b.text });
       }
     } else if (b.type === "tool_use") {
-      // Skip TodoWrite — displayed in the dedicated TodoPanel instead
-      if (b.name === "TodoWrite") continue;
       // Skip Agent tool_use if already rendered as subagent block
       if (b.name === "Agent" && subagentToolUseIds.has(b.toolUseId)) continue;
       items.push({
@@ -129,7 +139,18 @@ function TimelineItem({
       <div className="timeline-item">
         <div className="timeline-dot" />
         <div className="timeline-content timeline-text">
-          <ReactMarkdown remarkPlugins={[remarkGfm]}>{item.text}</ReactMarkdown>
+          <ReactMarkdown
+            remarkPlugins={[remarkGfm]}
+            components={{
+              a: ({ href, children }) => (
+                <a href={href} target="_blank" rel="noopener noreferrer">
+                  {children}
+                </a>
+              ),
+            }}
+          >
+            {item.text}
+          </ReactMarkdown>
           {isStreaming && <span className="timeline-streaming-cursor" />}
         </div>
       </div>

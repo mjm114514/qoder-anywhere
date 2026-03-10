@@ -3,6 +3,7 @@ import type {
   WSServerMessage,
   ControlPayload,
   AskUserQuestionItem,
+  UserImageAttachment,
   TodoItem,
   PermissionMode,
 } from "@lgtm-anywhere/shared";
@@ -39,6 +40,7 @@ export interface ChatMessage {
   role: "user" | "assistant";
   content: string; // plain text (for user messages or backward compat)
   blocks: ContentBlock[]; // structured content blocks for assistant messages
+  images?: UserImageAttachment[]; // image attachments (for user messages)
   isStreaming?: boolean;
 }
 
@@ -64,7 +66,7 @@ interface UseSessionSocketReturn {
   pendingToolApproval: PendingToolApproval | null;
   permissionMode: PermissionMode;
   todos: TodoItem[];
-  sendMessage: (text: string) => void;
+  sendMessage: (text: string, images?: UserImageAttachment[]) => void;
   answerQuestion: (requestId: string, answers: Record<string, string>) => void;
   answerToolApproval: (
     requestId: string,
@@ -454,6 +456,7 @@ export function useSessionSocket(
             role: "user",
             content: text,
             blocks: [{ type: "text", text }],
+            ...(ctrl.images?.length ? { images: ctrl.images } : {}),
           },
         ]);
         if (!isLoadingHistoryRef.current) {
@@ -556,11 +559,21 @@ export function useSessionSocket(
     };
   }, [sessionId, handleSdkMessage, handleControlMessage]);
 
-  const sendMessage = useCallback((text: string) => {
-    if (!wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) return;
-    wsRef.current.send(JSON.stringify({ type: "message", message: text }));
-    setIsStreaming(true);
-  }, []);
+  const sendMessage = useCallback(
+    (text: string, images?: UserImageAttachment[]) => {
+      if (!wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) return;
+      const payload: Record<string, unknown> = {
+        type: "message",
+        message: text,
+      };
+      if (images && images.length > 0) {
+        payload.images = images;
+      }
+      wsRef.current.send(JSON.stringify(payload));
+      setIsStreaming(true);
+    },
+    [],
+  );
 
   const answerQuestion = useCallback(
     (requestId: string, answers: Record<string, string>) => {

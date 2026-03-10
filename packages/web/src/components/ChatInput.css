@@ -1,12 +1,107 @@
 .chat-input {
   display: flex;
-  align-items: flex-end;
-  gap: 8px;
+  flex-direction: column;
+  gap: 0;
   padding: 12px 16px;
   border-top: 1px solid #e0e0e0;
   background: #fff;
   container-type: inline-size;
 }
+
+.chat-input-row {
+  display: flex;
+  align-items: flex-end;
+  gap: 8px;
+}
+
+/* ── Image preview strip ── */
+
+.chat-input-image-strip {
+  display: flex;
+  gap: 8px;
+  padding-bottom: 8px;
+  overflow-x: auto;
+  scrollbar-width: thin;
+}
+
+.chat-input-image-thumb {
+  position: relative;
+  flex-shrink: 0;
+  width: 64px;
+  height: 64px;
+  border-radius: 6px;
+  overflow: hidden;
+  border: 1px solid #d0d0d0;
+}
+
+.chat-input-image-thumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.chat-input-image-remove {
+  position: absolute;
+  top: 2px;
+  right: 2px;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  border: none;
+  background: rgba(0, 0, 0, 0.55);
+  color: #fff;
+  font-size: 14px;
+  line-height: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  padding: 0;
+  transition: background 0.15s;
+}
+
+.chat-input-image-remove:hover {
+  background: rgba(0, 0, 0, 0.8);
+}
+
+/* ── Attach button ── */
+
+.chat-input-attach {
+  box-sizing: border-box;
+  height: 43px;
+  width: 43px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border: 1px solid #d0d0d0;
+  border-radius: 8px;
+  background: #fff;
+  color: #666;
+  cursor: pointer;
+  flex-shrink: 0;
+  transition:
+    border-color 0.15s,
+    color 0.15s;
+}
+
+.chat-input-attach:hover:not(:disabled) {
+  border-color: #1976d2;
+  color: #1976d2;
+}
+
+.chat-input-attach:disabled {
+  background: #f5f5f5;
+  color: #bbb;
+  cursor: default;
+}
+
+.chat-input-file-hidden {
+  display: none;
+}
+
+/* ── Model select ── */
 
 .chat-input-model {
   /* Match textarea: font 14px * line-height 1.5 = 21px + padding 20px + border 2px = 43px */

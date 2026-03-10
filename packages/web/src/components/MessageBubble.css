@@ -12,6 +12,27 @@
   white-space: pre-wrap;
 }
 
+/* ── User image attachments ── */
+.message-bubble-images {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.message-bubble-image {
+  max-width: 100%;
+  max-height: 300px;
+  border-radius: 8px;
+  object-fit: contain;
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  cursor: pointer;
+}
+
+.message-bubble-image:hover {
+  border-color: rgba(255, 255, 255, 0.6);
+}
+
 /* ── Assistant (timeline) ── */
 .message-bubble--assistant {
   align-self: flex-start;

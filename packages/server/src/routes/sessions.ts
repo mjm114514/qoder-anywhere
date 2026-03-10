@@ -121,6 +121,7 @@ export function createSessionRoutes(sessionManager: SessionManager): Router {
         allowedTools: body.allowedTools,
         systemPrompt: body.systemPrompt,
         maxTurns: body.maxTurns,
+        images: body.images,
       });
 
       // Wait for SDK init message to provide the sessionId

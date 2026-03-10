@@ -1,5 +1,8 @@
 import { useState, useCallback, useRef, useEffect } from "react";
-import type { PermissionMode } from "@lgtm-anywhere/shared";
+import type {
+  PermissionMode,
+  UserImageAttachment,
+} from "@lgtm-anywhere/shared";
 import { createSession } from "../api";
 import { useSessionSocket } from "../hooks/useSessionSocket";
 import { MessageList } from "./MessageList";
@@ -133,7 +136,11 @@ export function ChatArea({
     }
   }
 
-  const handleNewSessionSend = async (text: string, model?: string) => {
+  const handleNewSessionSend = async (
+    text: string,
+    model?: string,
+    images?: UserImageAttachment[],
+  ) => {
     if (!selectedProject || creating) return;
     setCreating(true);
     setCreateError(null);
@@ -142,6 +149,7 @@ export function ChatArea({
         message: text,
         model: model || undefined,
         permissionMode: newSessionPermMode,
+        ...(images?.length ? { images } : {}),
       });
       onSessionCreated(res.sessionId);
     } catch (err) {
@@ -153,8 +161,8 @@ export function ChatArea({
   };
 
   const handleSend = useCallback(
-    (text: string, _model?: string) => {
-      sendMessage(text);
+    (text: string, _model?: string, images?: UserImageAttachment[]) => {
+      sendMessage(text, images);
       // Scroll to bottom after user sends a message
       requestAnimationFrame(() => {
         messageListRef.current?.scrollToBottom();

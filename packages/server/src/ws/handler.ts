@@ -161,7 +161,12 @@ async function handleConnection(
           cwd = info.cwd;
         }
 
-        await sessionManager.sendMessage(sessionId, msg.message, cwd);
+        await sessionManager.sendMessage(
+          sessionId,
+          msg.message,
+          cwd,
+          msg.images,
+        );
         // Subscribe via sessionManager to get batch-wrapped cache replay
         sessionManager.subscribeWS(sessionId, ws);
       } catch (err) {

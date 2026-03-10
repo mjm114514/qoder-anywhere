@@ -20,6 +20,7 @@ export type WSClientMessage =
 export interface WSMessageSend {
   type: "message";
   message: string;
+  images?: UserImageAttachment[];
 }
 
 export interface WSAnswerQuestion {
@@ -84,9 +85,17 @@ export type ControlPayload =
   | ControlHistoryBatchEnd
   | ControlTodoUpdate;
 
+export interface UserImageAttachment {
+  media_type: string;
+  /** base64-encoded image data */
+  data: string;
+}
+
 export interface ControlSessionMessage {
   type: "session_message";
   message: string;
+  /** Images attached to the user message (if any). */
+  images?: UserImageAttachment[];
 }
 
 export interface ControlAskUserQuestion {

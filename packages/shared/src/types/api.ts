@@ -5,6 +5,7 @@ export interface CreateSessionRequest {
   allowedTools?: string[];
   systemPrompt?: string;
   maxTurns?: number;
+  images?: import("./ws.js").UserImageAttachment[];
 }
 
 export interface SendMessageRequest {

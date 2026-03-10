@@ -6,7 +6,7 @@ import { SessionManager } from "./services/session-manager.js";
 export function createApp(sessionManager: SessionManager) {
   const app = express();
 
-  app.use(express.json());
+  app.use(express.json({ limit: "50mb" }));
 
   // CORS for local development
   app.use((_req, res, next) => {
