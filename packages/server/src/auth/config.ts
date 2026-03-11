@@ -1,220 +1,66 @@
 import crypto from "node:crypto";
+import fs from "node:fs";
+import path from "node:path";
+import os from "node:os";
 
-// ─── Word lists for human-readable access codes ──────────────
+// ─── Token persistence ──────────────────────────────────────
 
-const ADJECTIVES = [
-  "amber",
-  "blue",
-  "bold",
-  "brave",
-  "bright",
-  "calm",
-  "clear",
-  "cool",
-  "coral",
-  "crisp",
-  "cyan",
-  "dark",
-  "deep",
-  "dry",
-  "fair",
-  "fast",
-  "fine",
-  "firm",
-  "free",
-  "fresh",
-  "glad",
-  "gold",
-  "good",
-  "gray",
-  "green",
-  "happy",
-  "iron",
-  "keen",
-  "kind",
-  "lean",
-  "light",
-  "lime",
-  "live",
-  "long",
-  "loud",
-  "lucky",
-  "mild",
-  "mint",
-  "neat",
-  "new",
-  "nice",
-  "noble",
-  "odd",
-  "pale",
-  "pink",
-  "plain",
-  "plum",
-  "pure",
-  "quick",
-  "quiet",
-  "rare",
-  "red",
-  "rich",
-  "rose",
-  "ruby",
-  "safe",
-  "sage",
-  "sharp",
-  "shy",
-  "slim",
-  "slow",
-  "soft",
-  "swift",
-  "tall",
-  "tame",
-  "tan",
-  "teal",
-  "thin",
-  "tiny",
-  "true",
-  "vast",
-  "warm",
-  "white",
-  "wide",
-  "wild",
-  "wise",
-  "young",
-  "vivid",
-  "snowy",
-  "steel",
-  "stone",
-  "sunny",
-  "rapid",
-  "proud",
-  "prime",
-  "polar",
-  "pearl",
-  "olive",
-  "opal",
-  "open",
-  "maple",
-  "lunar",
-  "jolly",
-  "jade",
-  "ivory",
-  "icy",
-  "honey",
-  "hazy",
-  "grand",
-  "foggy",
-  "fleet",
-];
+const TOKEN_DIR = path.join(os.homedir(), ".lgtm-anywhere");
+const TOKEN_FILE = path.join(TOKEN_DIR, "auth-token");
 
-const NOUNS = [
-  "ant",
-  "ape",
-  "bat",
-  "bay",
-  "bear",
-  "bee",
-  "bird",
-  "bison",
-  "cat",
-  "clam",
-  "cod",
-  "colt",
-  "cow",
-  "crab",
-  "crane",
-  "crow",
-  "dart",
-  "deer",
-  "dog",
-  "dolphin",
-  "dove",
-  "drum",
-  "duck",
-  "eagle",
-  "eel",
-  "elk",
-  "elm",
-  "emu",
-  "falcon",
-  "fawn",
-  "fig",
-  "finch",
-  "fish",
-  "flame",
-  "fox",
-  "frog",
-  "gem",
-  "goat",
-  "goose",
-  "gull",
-  "hare",
-  "hawk",
-  "hill",
-  "horse",
-  "iris",
-  "jay",
-  "kite",
-  "lake",
-  "lamb",
-  "lark",
-  "leaf",
-  "lily",
-  "lion",
-  "lynx",
-  "mesa",
-  "mole",
-  "moon",
-  "moth",
-  "mouse",
-  "newt",
-  "oak",
-  "orca",
-  "otter",
-  "owl",
-  "panda",
-  "peak",
-  "pike",
-  "pine",
-  "pony",
-  "quail",
-  "rain",
-  "ram",
-  "raven",
-  "reef",
-  "robin",
-  "rose",
-  "sail",
-  "seal",
-  "shark",
-  "shell",
-  "sky",
-  "slug",
-  "snail",
-  "snow",
-  "song",
-  "star",
-  "stone",
-  "storm",
-  "sun",
-  "swan",
-  "thorn",
-  "tiger",
-  "toad",
-  "tree",
-  "trout",
-  "vine",
-  "wave",
-  "whale",
-  "wind",
-  "wolf",
-  "wren",
-];
+/** Generate a 128-bit hex token (32 hex characters). */
+function generateToken(): string {
+  return crypto.randomBytes(16).toString("hex");
+}
+
+/** Read a persisted token from disk. Returns null if not found. */
+function readPersistedToken(): string | null {
+  try {
+    const raw = fs.readFileSync(TOKEN_FILE, "utf-8").trim();
+    // Validate: must be 32 hex chars
+    if (/^[0-9a-f]{32}$/.test(raw)) return raw;
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+/** Write a token to disk with restricted permissions (owner-only). */
+function persistToken(token: string): void {
+  fs.mkdirSync(TOKEN_DIR, { recursive: true, mode: 0o700 });
+  fs.writeFileSync(TOKEN_FILE, token + "\n", { mode: 0o600 });
+}
+
+/**
+ * Load or create a persistent auth token.
+ * - If a token file exists and is valid, reuse it.
+ * - Otherwise generate a new one and persist it.
+ */
+export function loadOrCreateToken(): string {
+  const existing = readPersistedToken();
+  if (existing) return existing;
+
+  const token = generateToken();
+  persistToken(token);
+  return token;
+}
+
+/**
+ * Refresh the auth token: generate a new one, persist it, and return it.
+ */
+export function refreshToken(): string {
+  const token = generateToken();
+  persistToken(token);
+  return token;
+}
+
+// ─── AuthConfig ─────────────────────────────────────────────
 
 export interface AuthConfig {
   /** Whether auth is enabled */
   enabled: boolean;
-  /** Human-readable access code (e.g. "blue-tiger-42") */
-  accessCode: string;
+  /** 128-bit hex auth token */
+  authToken: string;
   /** Secret for signing session cookies */
   sessionSecret: string;
   /** Cookie name */
@@ -227,23 +73,15 @@ export interface AuthConfig {
   lockoutMs: number;
 }
 
-/** Generate a human-readable access code: adjective-noun-NN */
-function generateAccessCode(): string {
-  const adj = ADJECTIVES[crypto.randomInt(ADJECTIVES.length)];
-  const noun = NOUNS[crypto.randomInt(NOUNS.length)];
-  const num = crypto.randomInt(100).toString().padStart(2, "0");
-  return `${adj}-${noun}-${num}`;
-}
-
 export function loadAuthConfig(
-  overrides: { enabled?: boolean; accessCode?: string } = {},
+  overrides: { enabled?: boolean; authToken?: string } = {},
 ): AuthConfig {
   const enabled = overrides.enabled ?? true;
-  const accessCode = overrides.accessCode ?? generateAccessCode();
+  const authToken = overrides.authToken ?? loadOrCreateToken();
 
   return {
     enabled,
-    accessCode,
+    authToken,
     sessionSecret: crypto.randomBytes(32).toString("hex"),
     cookieName: "lgtm_session",
     cookieMaxAge: 24 * 60 * 60 * 1000, // 24 hours

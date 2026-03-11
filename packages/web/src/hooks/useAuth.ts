@@ -34,13 +34,13 @@ export function useAuth(): {
   }, []);
 
   const verify = useCallback(
-    async (code: string): Promise<{ ok: boolean; error?: string }> => {
+    async (token: string): Promise<{ ok: boolean; error?: string }> => {
       try {
         const res = await fetch("/api/auth/verify", {
           method: "POST",
           credentials: "include",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ code }),
+          body: JSON.stringify({ token }),
         });
         const data = (await res.json()) as {
           ok: boolean;
@@ -50,7 +50,7 @@ export function useAuth(): {
           setAuth({ state: "authenticated" });
           return { ok: true };
         }
-        return { ok: false, error: data.error ?? "Invalid code" };
+        return { ok: false, error: data.error ?? "Invalid token" };
       } catch {
         return { ok: false, error: "Network error" };
       }

@@ -7,7 +7,7 @@ export interface AuthStatusResponse {
 
 /** POST /api/auth/verify — request body */
 export interface AuthVerifyRequest {
-  code: string;
+  token: string;
 }
 
 /** POST /api/auth/verify → 200 (success) */

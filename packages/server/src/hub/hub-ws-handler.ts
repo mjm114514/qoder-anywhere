@@ -169,7 +169,7 @@ function handleNodeConnect(
         // Compute proof: HMAC-SHA256(nonce, accessCode)
         const proof = authConfig.enabled
           ? crypto
-              .createHmac("sha256", authConfig.accessCode)
+              .createHmac("sha256", authConfig.authToken)
               .update(challenge.nonce)
               .digest("hex")
           : "no-auth";

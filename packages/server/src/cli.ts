@@ -4,7 +4,7 @@
 import { parseArgs } from "node:util";
 import os from "node:os";
 import { startServer } from "./index.js";
-import { loadAuthConfig } from "./auth/config.js";
+import { loadAuthConfig, refreshToken } from "./auth/config.js";
 
 function printHelp() {
   console.log(`Usage: lgtm-anywhere [options]
@@ -15,6 +15,7 @@ Options:
       --hub                      Start in hub mode
       --connect <hub-url>        Connect to a hub server
       --access-code <code>       Access code for hub connection
+      --refresh-token            Refresh the auth token and exit
   -h, --help                     Show this help message`);
 }
 
@@ -24,6 +25,7 @@ const cliOptions = {
   hub: { type: "boolean", default: false },
   connect: { type: "string" },
   "access-code": { type: "string" },
+  "refresh-token": { type: "boolean", default: false },
   help: { type: "boolean", short: "h", default: false },
 } as const;
 
@@ -39,6 +41,16 @@ try {
 
 if (values.help) {
   printHelp();
+  process.exit(0);
+}
+
+// Handle --refresh-token: generate new token, print it, and exit
+if (values["refresh-token"]) {
+  const token = refreshToken();
+  console.log("[lgtm-anywhere] Auth token refreshed.");
+  console.log();
+  console.log(`  ${token}`);
+  console.log();
   process.exit(0);
 }
 

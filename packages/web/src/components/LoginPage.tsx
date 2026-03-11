@@ -8,19 +8,19 @@ interface LoginPageProps {
 }
 
 export function LoginPage({ auth, onVerify }: LoginPageProps) {
-  const [code, setCode] = useState("");
+  const [token, setToken] = useState("");
   const [error, setError] = useState("");
   const [submitting, setSubmitting] = useState(false);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!code.trim() || submitting) return;
+    if (!token.trim() || submitting) return;
     setError("");
     setSubmitting(true);
-    const result = await onVerify(code.trim());
+    const result = await onVerify(token.trim());
     setSubmitting(false);
     if (!result.ok) {
-      setError(result.error ?? "Invalid code");
+      setError(result.error ?? "Invalid token");
     }
   };
 
@@ -49,13 +49,13 @@ export function LoginPage({ auth, onVerify }: LoginPageProps) {
         {auth.state === "unauthenticated" && (
           <form onSubmit={handleSubmit} className="login-form">
             <p className="login-description">
-              Enter the access code shown in your terminal.
+              Enter the auth token shown in your terminal.
             </p>
             <input
               type="text"
-              value={code}
-              onChange={(e) => setCode(e.target.value)}
-              placeholder="e.g. blue-tiger-42"
+              value={token}
+              onChange={(e) => setToken(e.target.value)}
+              placeholder="Paste auth token"
               className="login-input"
               autoFocus
               autoComplete="off"
@@ -66,7 +66,7 @@ export function LoginPage({ auth, onVerify }: LoginPageProps) {
             <button
               type="submit"
               className="login-btn"
-              disabled={!code.trim() || submitting}
+              disabled={!token.trim() || submitting}
             >
               {submitting ? "Verifying..." : "Continue"}
             </button>

@@ -30,9 +30,9 @@ export async function startServer(options: ServerOptions = {}) {
     );
     if (authConfig.enabled) {
       console.log();
-      console.log("┌──────────────────────────────────────────────────┐");
-      console.log(`│  Access code: ${authConfig.accessCode.padEnd(34)}│`);
-      console.log("└──────────────────────────────────────────────────┘");
+      console.log("┌────────────────────────────────────────────────────────┐");
+      console.log(`│  Auth token: ${authConfig.authToken.padEnd(42)}│`);
+      console.log("└────────────────────────────────────────────────────────┘");
       console.log();
     } else {
       console.log(

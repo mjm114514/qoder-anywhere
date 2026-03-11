@@ -130,21 +130,21 @@ export function createAuthRouter(config: AuthConfig): Router {
       return;
     }
 
-    const { code } = req.body as { code?: string };
-    if (!code) {
+    const { token } = req.body as { token?: string };
+    if (!token) {
       res.status(400).json({
         ok: false,
-        error: "Access code is required",
+        error: "Auth token is required",
       });
       return;
     }
 
-    // Case-insensitive comparison
-    if (code.trim().toLowerCase() !== config.accessCode.toLowerCase()) {
+    // Exact comparison
+    if (token.trim() !== config.authToken) {
       recordFailedAttempt(config, ip);
       res.status(401).json({
         ok: false,
-        error: "Invalid access code",
+        error: "Invalid auth token",
       });
       return;
     }

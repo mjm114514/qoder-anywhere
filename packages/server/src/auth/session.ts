@@ -5,7 +5,7 @@ import type { AuthConfig } from "./config.js";
 
 /**
  * Cookie value is a signed token: random-hex + "." + hmac-sha256.
- * The token proves the user supplied the correct access code.
+ * The token proves the user supplied a valid auth token.
  */
 
 /** Generate a signed session token. */
