@@ -3,7 +3,7 @@ import { startServer, type ServerHandle } from "./helpers/server-lifecycle.js";
 import { WSClient } from "./helpers/ws-client.js";
 
 const THIS_CWD = process.cwd();
-const TEST_CWD = "/Users/jiamingmao/repos/test-lgtm-anywhere";
+const TEST_CWD = "/Users/jiamingmao/repos/test-qoder-anywhere";
 
 let server: ServerHandle;
 let createdSessionId: string;

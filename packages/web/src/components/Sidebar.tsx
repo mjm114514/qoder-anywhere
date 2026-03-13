@@ -36,7 +36,7 @@ export function Sidebar({
       <div className="sidebar-header">
         {!collapsed && (
           <h1 className="sidebar-title">
-            {isHub ? "LGTM Hub" : "LGTM Anywhere"}
+            {isHub ? "Qoder Hub" : "Qoder Anywhere"}
           </h1>
         )}
         <button

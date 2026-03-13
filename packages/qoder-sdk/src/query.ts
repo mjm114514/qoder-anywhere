@@ -94,7 +94,7 @@ export function query(params: QueryParams): Query {
         () => {
           transport.kill();
         },
-        { once: true }
+        { once: true },
       );
     }
   }

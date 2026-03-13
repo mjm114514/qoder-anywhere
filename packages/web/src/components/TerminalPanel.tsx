@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from "react";
-import type { TerminalInfo } from "@lgtm-anywhere/shared";
+import type { TerminalInfo } from "@qoder-anywhere/shared";
 import {
   createTerminal,
   fetchTerminals,

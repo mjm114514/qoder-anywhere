@@ -9,7 +9,7 @@ import type {
   CreateTerminalResponse,
   HubInfoResponse,
   NodeInfo,
-} from "@lgtm-anywhere/shared";
+} from "@qoder-anywhere/shared";
 
 async function fetchJSON<T>(url: string, init?: RequestInit): Promise<T> {
   const res = await fetch(url, {

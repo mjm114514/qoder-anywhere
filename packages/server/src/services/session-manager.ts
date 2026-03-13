@@ -21,7 +21,7 @@ import type {
   WSSdkMessage,
   WSControlMessage,
   ControlPayload,
-} from "@lgtm-anywhere/shared";
+} from "@qoder-anywhere/shared";
 import { config } from "../config.js";
 import { MessageQueue } from "./message-queue.js";
 

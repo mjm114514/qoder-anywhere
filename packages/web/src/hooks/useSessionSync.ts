@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from "react";
-import type { SessionState, WSSyncMessage } from "@lgtm-anywhere/shared";
+import type { SessionState, WSSyncMessage } from "@qoder-anywhere/shared";
 import { fetchWsToken, buildWsUrl } from "../api";
 
 interface UseSessionSyncReturn {

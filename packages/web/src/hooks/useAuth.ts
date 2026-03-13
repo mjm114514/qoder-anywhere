@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from "react";
-import type { AuthStatus } from "@lgtm-anywhere/shared";
+import type { AuthStatus } from "@qoder-anywhere/shared";
 
 export function useAuth(): {
   auth: AuthStatus;

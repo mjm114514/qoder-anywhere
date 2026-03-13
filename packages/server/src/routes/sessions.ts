@@ -1,13 +1,10 @@
 import { Router } from "express";
-import {
-  listSessions,
-  getSessionMessages,
-} from "qoder-sdk";
+import { listSessions, getSessionMessages } from "qoder-sdk";
 import type {
   CreateSessionRequest,
   UpdateSessionRequest,
   PermissionMode,
-} from "@lgtm-anywhere/shared";
+} from "@qoder-anywhere/shared";
 import { SessionManager } from "../services/session-manager.js";
 
 export function createSessionRoutes(sessionManager: SessionManager): Router {

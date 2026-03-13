@@ -9,7 +9,7 @@ import {
 import { WSClient } from "./helpers/ws-client.js";
 
 const THIS_CWD = process.cwd();
-const TEST_CWD = "/Users/jiamingmao/repos/test-lgtm-anywhere";
+const TEST_CWD = "/Users/jiamingmao/repos/test-qoder-anywhere";
 
 let hub: HubHandle;
 let node: NodeHandle;
@@ -310,7 +310,7 @@ describe("Hub-Node E2E", () => {
       ws.send(JSON.stringify({ type: "resize", cols: 80, rows: 24 }));
 
       // Send a command through the terminal
-      const marker = `__LGTM_TEST_${Date.now()}__`;
+      const marker = `__QODER_TEST_${Date.now()}__`;
       ws.send(JSON.stringify({ type: "input", data: `echo ${marker}\n` }));
 
       // Wait for the echoed marker to appear in output

@@ -6,7 +6,7 @@ import type {
   UserImageAttachment,
   TodoItem,
   PermissionMode,
-} from "@lgtm-anywhere/shared";
+} from "@qoder-anywhere/shared";
 import type { SDKMessage } from "qoder-sdk";
 import { fetchWsToken, buildWsUrl } from "../api";
 

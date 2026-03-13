@@ -1,5 +1,5 @@
 {
-  "name": "@lgtm-anywhere/server",
+  "name": "@qoder-anywhere/server",
   "version": "0.1.0",
   "type": "module",
   "main": "./dist/index.js",
@@ -8,7 +8,7 @@
     "public"
   ],
   "bin": {
-    "lgtm-anywhere": "./dist/cli.js"
+    "qoder-anywhere": "./dist/cli.js"
   },
   "scripts": {
     "build": "tsc",
@@ -18,7 +18,7 @@
   },
   "dependencies": {
     "qoder-sdk": "*",
-    "@lgtm-anywhere/shared": "^0.1.0",
+    "@qoder-anywhere/shared": "^0.1.0",
     "cookie": "^1.1.1",
     "express": "^5.1.0",
     "node-pty": "^1.2.0-beta.11",

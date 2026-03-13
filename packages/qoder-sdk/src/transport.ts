@@ -17,10 +17,7 @@
  * - Permission control protocol (can_use_tool requests/responses)
  */
 
-import {
-  spawn,
-  type ChildProcess,
-} from "node:child_process";
+import { spawn, type ChildProcess } from "node:child_process";
 import {
   createInterface,
   type Interface as ReadlineInterface,
@@ -86,7 +83,11 @@ export class ProcessTransport {
     }
 
     // --dangerously-skip-permissions / --yolo
-    if (opts.permissionMode === "yolo" || opts.permissionMode === "bypassPermissions" || opts.allowDangerouslySkipPermissions) {
+    if (
+      opts.permissionMode === "yolo" ||
+      opts.permissionMode === "bypassPermissions" ||
+      opts.allowDangerouslySkipPermissions
+    ) {
       args.push("--dangerously-skip-permissions");
     }
 
@@ -231,7 +232,9 @@ export class ProcessTransport {
 
     // Wrap readline as an async iterator
     for await (const line of rl) {
-      const parsed = parseJsonLine<QoderMessage | QoderControlRequest | QoderControlResponseFromCli>(line);
+      const parsed = parseJsonLine<
+        QoderMessage | QoderControlRequest | QoderControlResponseFromCli
+      >(line);
       if (parsed === null) continue;
 
       // Intercept control_request messages (permission checks from qodercli)
@@ -256,7 +259,9 @@ export class ProcessTransport {
             pending.resolve();
           } else {
             pending.reject(
-              new Error(`Control request ${requestId} failed: ${JSON.stringify(resp.response)}`)
+              new Error(
+                `Control request ${requestId} failed: ${JSON.stringify(resp.response)}`,
+              ),
             );
           }
         }
@@ -287,7 +292,11 @@ export class ProcessTransport {
         toolUseID: req.request_id,
       };
       try {
-        result = await canUseTool(req.request.tool_name, req.request.input, options);
+        result = await canUseTool(
+          req.request.tool_name,
+          req.request.input,
+          options,
+        );
       } catch (err) {
         // If the callback throws, deny with the error message
         result = {

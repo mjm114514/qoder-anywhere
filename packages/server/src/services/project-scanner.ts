@@ -1,5 +1,5 @@
 import { listSessions } from "qoder-sdk";
-import type { ProjectListItem } from "@lgtm-anywhere/shared";
+import type { ProjectListItem } from "@qoder-anywhere/shared";
 
 export async function scanProjects(): Promise<ProjectListItem[]> {
   const sessions = await listSessions({});

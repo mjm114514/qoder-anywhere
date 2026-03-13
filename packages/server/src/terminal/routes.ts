@@ -1,5 +1,5 @@
 import { Router } from "express";
-import type { CreateTerminalRequest } from "@lgtm-anywhere/shared";
+import type { CreateTerminalRequest } from "@qoder-anywhere/shared";
 import { TerminalManager } from "./terminal-manager.js";
 
 export function createTerminalRoutes(manager: TerminalManager): Router {

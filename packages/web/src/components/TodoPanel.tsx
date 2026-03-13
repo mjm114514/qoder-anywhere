@@ -1,5 +1,5 @@
 import { useState } from "react";
-import type { TodoItem } from "@lgtm-anywhere/shared";
+import type { TodoItem } from "@qoder-anywhere/shared";
 import "./TodoPanel.css";
 
 interface TodoPanelProps {
