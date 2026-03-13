@@ -70,7 +70,7 @@
 
 .perm-select-trigger:focus {
   outline: none;
-  border-color: #1976d2;
+  border-color: #2e7d32;
 }
 
 .perm-select-label {
@@ -133,7 +133,7 @@
 
 .perm-select-option--active {
   font-weight: 600;
-  background: #f0f4ff;
+  background: #f1f8e9;
 }
 
 /* ── End permission select ── */

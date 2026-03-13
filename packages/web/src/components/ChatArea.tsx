@@ -21,7 +21,7 @@ const PERMISSION_MODE_OPTIONS: {
   color: string;
 }[] = [
   { label: "YOLO", value: "yolo", color: "#d32f2f" },
-  { label: "Default", value: "default", color: "#1976d2" },
+  { label: "Default", value: "default", color: "#2e7d32" },
 ];
 
 function getPermissionColor(mode: PermissionMode): string {

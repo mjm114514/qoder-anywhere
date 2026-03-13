@@ -34,7 +34,7 @@ const EXIT_PLAN_MODE_OPTIONS: {
     label: "Default",
     fullLabel: "Approve the plan and switch to Default mode",
     mode: "default",
-    color: "#1976d2",
+    color: "#2e7d32",
   },
   {
     label: "YOLO",
