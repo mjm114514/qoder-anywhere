@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { fetchProjects } from "../api";
 import { getProjectName, formatRelativeTime } from "../utils/format";
 import { useSessionSync } from "../hooks/useSessionSync";
-import type { ProjectListItem } from "@lgtm-anywhere/shared";
+import type { ProjectListItem } from "@qoder-anywhere/shared";
 import type { SelectedProject } from "../App";
 import "./ProjectList.css";
 

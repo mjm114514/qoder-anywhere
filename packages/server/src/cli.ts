@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// CLI entry point for lgtm-anywhere
+// CLI entry point for qoder-anywhere
 
 import { parseArgs } from "node:util";
 import os from "node:os";
@@ -7,7 +7,7 @@ import { startServer } from "./index.js";
 import { loadAuthConfig, refreshToken } from "./auth/config.js";
 
 function printHelp() {
-  console.log(`Usage: lgtm-anywhere [options]
+  console.log(`Usage: qoder-anywhere [options]
 
 Options:
   -p, --port <port>              Port to listen on (default: 3001)
@@ -47,7 +47,7 @@ if (values.help) {
 // Handle --refresh-token: generate new token, print it, and exit
 if (values["refresh-token"]) {
   const token = refreshToken();
-  console.log("[lgtm-anywhere] Auth token refreshed.");
+  console.log("[qoder-anywhere] Auth token refreshed.");
   console.log();
   console.log(`  ${token}`);
   console.log();
@@ -68,10 +68,10 @@ if (values.hub) {
   const accessCode = values["access-code"];
   if (!accessCode) {
     console.error(
-      "[lgtm-anywhere] --access-code is required when using --connect",
+      "[qoder-anywhere] --access-code is required when using --connect",
     );
     console.error(
-      "  Usage: lgtm-anywhere --connect <hub-url> --access-code <code>",
+      "  Usage: qoder-anywhere --connect <hub-url> --access-code <code>",
     );
     console.error(
       "  The access code is shown in the hub's terminal when it starts.",
@@ -110,8 +110,8 @@ if (values.hub) {
   process.on("SIGINT", () => shutdown("SIGINT"));
   process.on("SIGTERM", () => shutdown("SIGTERM"));
 
-  console.log(`[lgtm-anywhere] Connecting to hub at ${values.connect}`);
-  console.log(`[lgtm-anywhere] Node name: ${nodeName}`);
+  console.log(`[qoder-anywhere] Connecting to hub at ${values.connect}`);
+  console.log(`[qoder-anywhere] Node name: ${nodeName}`);
 } else {
   // Normal mode
   startServer({ port, authConfig });

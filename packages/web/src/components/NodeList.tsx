@@ -1,7 +1,7 @@
 import { useEffect, useState, useCallback } from "react";
 import { fetchNodes, fetchNodeProjects } from "../api";
 import { getProjectName, formatRelativeTime } from "../utils/format";
-import type { NodeInfo, ProjectListItem } from "@lgtm-anywhere/shared";
+import type { NodeInfo, ProjectListItem } from "@qoder-anywhere/shared";
 import type { SelectedProject } from "../App";
 import "./NodeList.css";
 

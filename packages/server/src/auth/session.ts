@@ -39,7 +39,7 @@ export function setSessionCookie(
   const token = signToken(config.sessionSecret);
   const cookie = serializeCookie(config.cookieName, token, {
     httpOnly: true,
-    secure: false, // lgtm-anywhere may run over plain HTTP
+    secure: false, // qoder-anywhere may run over plain HTTP
     sameSite: "lax",
     path: "/",
     maxAge: config.cookieMaxAge / 1000,

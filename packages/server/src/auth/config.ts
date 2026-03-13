@@ -5,7 +5,7 @@ import os from "node:os";
 
 // ─── Token persistence ──────────────────────────────────────
 
-const TOKEN_DIR = path.join(os.homedir(), ".lgtm-anywhere");
+const TOKEN_DIR = path.join(os.homedir(), ".qoder-anywhere");
 const TOKEN_FILE = path.join(TOKEN_DIR, "auth-token");
 
 /** Generate a 128-bit hex token (32 hex characters). */
@@ -83,7 +83,7 @@ export function loadAuthConfig(
     enabled,
     authToken,
     sessionSecret: crypto.randomBytes(32).toString("hex"),
-    cookieName: "lgtm_session",
+    cookieName: "qoder_session",
     cookieMaxAge: 24 * 60 * 60 * 1000, // 24 hours
     maxAttempts: 5,
     lockoutMs: 60 * 1000, // 1 minute

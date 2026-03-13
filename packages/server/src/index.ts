@@ -24,9 +24,9 @@ export async function startServer(options: ServerOptions = {}) {
   const server = app.listen(port, () => {
     const url = `http://localhost:${port}`;
     console.log();
-    console.log(`[lgtm-anywhere] Server listening on ${url}`);
+    console.log(`[qoder-anywhere] Server listening on ${url}`);
     console.log(
-      `[lgtm-anywhere] WebSocket at ws://localhost:${port}/ws/sessions/:session_id`,
+      `[qoder-anywhere] WebSocket at ws://localhost:${port}/ws/sessions/:session_id`,
     );
     if (authConfig.enabled) {
       console.log();
@@ -36,7 +36,7 @@ export async function startServer(options: ServerOptions = {}) {
       console.log();
     } else {
       console.log(
-        "[lgtm-anywhere] ⚠ Auth disabled — server is open (localhost only recommended)",
+        "[qoder-anywhere] ⚠ Auth disabled — server is open (localhost only recommended)",
       );
     }
   });

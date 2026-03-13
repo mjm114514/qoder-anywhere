@@ -19,9 +19,9 @@ export async function startHubServer(options: HubServerOptions = {}) {
   const server = app.listen(port, () => {
     const url = `http://localhost:${port}`;
     console.log();
-    console.log(`[lgtm-anywhere hub] Hub server listening on ${url}`);
+    console.log(`[qoder-anywhere hub] Hub server listening on ${url}`);
     console.log(
-      `[lgtm-anywhere hub] Nodes connect via ws://localhost:${port}/ws/hub/connect`,
+      `[qoder-anywhere hub] Nodes connect via ws://localhost:${port}/ws/hub/connect`,
     );
     if (authConfig.enabled) {
       console.log();
@@ -31,7 +31,7 @@ export async function startHubServer(options: HubServerOptions = {}) {
       console.log();
     } else {
       console.log(
-        "[lgtm-anywhere hub] ⚠ Auth disabled — server is open (localhost only recommended)",
+        "[qoder-anywhere hub] ⚠ Auth disabled — server is open (localhost only recommended)",
       );
     }
   });

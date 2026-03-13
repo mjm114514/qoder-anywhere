@@ -1,5 +1,5 @@
 import WebSocket from "ws";
-import type { WSServerMessage } from "@lgtm-anywhere/shared";
+import type { WSServerMessage } from "@qoder-anywhere/shared";
 
 export class WSClient {
   private ws: WebSocket;

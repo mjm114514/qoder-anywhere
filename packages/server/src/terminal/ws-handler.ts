@@ -1,5 +1,5 @@
 import type { WebSocket } from "ws";
-import type { WSTerminalClientMessage } from "@lgtm-anywhere/shared";
+import type { WSTerminalClientMessage } from "@qoder-anywhere/shared";
 import { TerminalManager } from "./terminal-manager.js";
 
 export function handleTerminalConnection(

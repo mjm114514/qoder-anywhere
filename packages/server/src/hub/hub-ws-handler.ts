@@ -8,7 +8,7 @@ import { HubNodeManager } from "./hub-node-manager.js";
 import type {
   NodeToHubChallenge,
   NodeToHubRegister,
-} from "@lgtm-anywhere/shared";
+} from "@qoder-anywhere/shared";
 
 // Hub WS paths:
 // /ws/hub/connect              — node connects to hub (node ↔ hub link)

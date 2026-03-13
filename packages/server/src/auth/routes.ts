@@ -3,7 +3,7 @@ import type {
   AuthStatusResponse,
   AuthMeResponse,
   AuthWsTokenResponse,
-} from "@lgtm-anywhere/shared";
+} from "@qoder-anywhere/shared";
 import type { AuthConfig } from "./config.js";
 import {
   setSessionCookie,

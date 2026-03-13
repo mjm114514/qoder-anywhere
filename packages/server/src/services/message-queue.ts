@@ -1,5 +1,5 @@
 import type { QoderUserMessage, ContentBlock } from "qoder-sdk";
-import type { UserImageAttachment } from "@lgtm-anywhere/shared";
+import type { UserImageAttachment } from "@qoder-anywhere/shared";
 
 /**
  * MessageQueue bridges user messages to the SDK's streaming input mode.
