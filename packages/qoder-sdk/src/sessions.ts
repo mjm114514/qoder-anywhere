@@ -58,7 +58,7 @@ function parseSessionInfo(raw: RawSessionJson): QoderSessionInfo {
  * Augment a raw-parsed session message with Claude Agent SDK compatibility fields.
  */
 function augmentSessionMessage(
-  raw: Omit<QoderSessionMessage, "session_id" | "parent_tool_use_id">
+  raw: Omit<QoderSessionMessage, "session_id" | "parent_tool_use_id">,
 ): QoderSessionMessage {
   return {
     ...raw,
@@ -71,7 +71,7 @@ function augmentSessionMessage(
  * Read all *-session.json files from a single project directory.
  */
 async function readProjectSessions(
-  projectPath: string
+  projectPath: string,
 ): Promise<QoderSessionInfo[]> {
   const sessions: QoderSessionInfo[] = [];
 
@@ -89,7 +89,7 @@ async function readProjectSessions(
       const content = await readFile(join(projectPath, file), "utf-8");
       const raw = JSON.parse(content) as RawSessionJson;
       return parseSessionInfo(raw);
-    })
+    }),
   );
 
   for (const result of results) {
@@ -116,7 +116,7 @@ async function readProjectSessions(
  * ```
  */
 export async function listSessions(
-  options: ListSessionsOptions = {}
+  options: ListSessionsOptions = {},
 ): Promise<QoderSessionInfo[]> {
   const projectsDir = resolveProjectsDir(options.configDir);
 
@@ -145,7 +145,7 @@ export async function listSessions(
   const allSessions: QoderSessionInfo[] = [];
 
   const results = await Promise.allSettled(
-    projectDirs.map((dir) => readProjectSessions(join(projectsDir, dir)))
+    projectDirs.map((dir) => readProjectSessions(join(projectsDir, dir))),
   );
 
   for (const result of results) {
@@ -171,7 +171,7 @@ export async function listSessions(
  */
 async function findSessionProjectDir(
   sessionId: string,
-  projectsDir: string
+  projectsDir: string,
 ): Promise<string | null> {
   let projectDirs: string[];
   try {
@@ -215,7 +215,7 @@ async function findSessionProjectDir(
  */
 export async function getSessionMessages(
   sessionId: string,
-  options: GetSessionMessagesOptions = {}
+  options: GetSessionMessagesOptions = {},
 ): Promise<QoderSessionMessage[]> {
   const projectsDir = resolveProjectsDir(options.configDir);
 
@@ -229,7 +229,7 @@ export async function getSessionMessages(
     const found = await findSessionProjectDir(sessionId, projectsDir);
     if (!found) {
       throw new Error(
-        `Session ${sessionId} not found. Provide a 'dir' option to narrow the search.`
+        `Session ${sessionId} not found. Provide a 'dir' option to narrow the search.`,
       );
     }
     projectPath = found;
@@ -242,7 +242,7 @@ export async function getSessionMessages(
     content = await readFile(jsonlPath, "utf-8");
   } catch (err) {
     throw new Error(
-      `Could not read session transcript at ${jsonlPath}: ${err instanceof Error ? err.message : String(err)}`
+      `Could not read session transcript at ${jsonlPath}: ${err instanceof Error ? err.message : String(err)}`,
     );
   }
 
@@ -252,8 +252,7 @@ export async function getSessionMessages(
   // Apply offset and limit if specified
   const start = options.offset ?? 0;
   if (start > 0 || options.limit !== undefined) {
-    const end =
-      options.limit !== undefined ? start + options.limit : undefined;
+    const end = options.limit !== undefined ? start + options.limit : undefined;
     return messages.slice(start, end);
   }
 

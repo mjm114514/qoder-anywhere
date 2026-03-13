@@ -1,8 +1,5 @@
 import { Router } from "express";
-import {
-  listSessions,
-  getSessionMessages,
-} from "qoder-sdk";
+import { listSessions, getSessionMessages } from "qoder-sdk";
 import type {
   CreateSessionRequest,
   UpdateSessionRequest,
