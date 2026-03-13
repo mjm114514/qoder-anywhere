@@ -12,7 +12,7 @@
 .ask-question-header {
   font-size: 12px;
   font-weight: 600;
-  color: #1565c0;
+  color: #1b5e20;
   text-transform: uppercase;
   letter-spacing: 0.5px;
 }
@@ -32,7 +32,7 @@
   font-size: 12px;
   font-weight: 500;
   color: #546e7a;
-  background: #e8eef3;
+  background: #e8f0e9;
   border: 1.5px solid transparent;
   border-radius: 6px;
   cursor: pointer;
@@ -40,13 +40,13 @@
 }
 
 .ask-question-tab:hover {
-  background: #dce8f0;
+  background: #d5e8d4;
 }
 
 .ask-question-tab--active {
-  color: #1565c0;
+  color: #1b5e20;
   background: #fff;
-  border-color: #1976d2;
+  border-color: #2e7d32;
   font-weight: 600;
 }
 
@@ -55,7 +55,7 @@
 }
 
 .ask-question-tab--answered.ask-question-tab--active {
-  color: #1565c0;
+  color: #1b5e20;
 }
 
 .ask-question-tab-index {
@@ -67,12 +67,12 @@
   font-size: 11px;
   font-weight: 600;
   border-radius: 50%;
-  background: #cfd8dc;
+  background: #c8d5c7;
   color: #fff;
 }
 
 .ask-question-tab--active .ask-question-tab-index {
-  background: #1976d2;
+  background: #2e7d32;
 }
 
 .ask-question-tab--answered .ask-question-tab-index {
@@ -97,8 +97,8 @@
   padding: 2px 8px;
   font-size: 11px;
   font-weight: 600;
-  color: #1565c0;
-  background: #e3f2fd;
+  color: #1b5e20;
+  background: #e8f5e9;
   border-radius: 10px;
 }
 
@@ -138,13 +138,13 @@
 }
 
 .ask-question-option:hover {
-  border-color: #90caf9;
-  background: #f0f4f8;
+  border-color: #81c784;
+  background: #f0f5f0;
 }
 
 .ask-question-option--selected {
-  border-color: #1976d2;
-  background: #e8f0fe;
+  border-color: #2e7d32;
+  background: #e8f5e9;
 }
 
 .ask-question-option-label {
@@ -175,7 +175,7 @@
 }
 
 .ask-question-custom input:focus {
-  border-color: #1976d2;
+  border-color: #2e7d32;
 }
 
 /* Footer with progress + submit */
@@ -196,7 +196,7 @@
   font-size: 13px;
   font-weight: 600;
   color: #fff;
-  background: #1976d2;
+  background: #2e7d32;
   border: none;
   border-radius: 6px;
   cursor: pointer;
@@ -204,7 +204,7 @@
 }
 
 .ask-question-submit:hover:not(:disabled) {
-  background: #1565c0;
+  background: #1b5e20;
 }
 
 .ask-question-submit:disabled {

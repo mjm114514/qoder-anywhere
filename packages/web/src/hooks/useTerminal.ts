@@ -55,7 +55,7 @@ export function useTerminal(
         background: "#ffffff",
         foreground: "#1a1a1a",
         cursor: "#1a1a1a",
-        selectionBackground: "#b5d5ff",
+        selectionBackground: "#b9f6ca",
         selectionForeground: "#1a1a1a",
         black: "#1a1a1a",
         red: "#d32f2f",

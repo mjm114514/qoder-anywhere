@@ -125,13 +125,13 @@
 
 .tool-approval-btn--allow {
   color: #fff;
-  background: #1976d2;
-  border: 1px solid #1976d2;
+  background: #2e7d32;
+  border: 1px solid #2e7d32;
 }
 
 .tool-approval-btn--allow:hover {
-  background: #1565c0;
-  border-color: #1565c0;
+  background: #1b5e20;
+  border-color: #1b5e20;
 }
 
 .tool-approval-btn--deny {
@@ -160,7 +160,7 @@
 .tool-approval-ep-header {
   font-size: 12px;
   font-weight: 600;
-  color: #1565c0;
+  color: #1b5e20;
   text-transform: uppercase;
   letter-spacing: 0.5px;
 }
@@ -188,8 +188,8 @@
 }
 
 .tool-approval-ep-option:hover {
-  border-color: #90caf9;
-  background: #f0f4f8;
+  border-color: #81c784;
+  background: #f0f5f0;
 }
 
 .tool-approval-ep-dot {
@@ -244,7 +244,7 @@
 }
 
 .tool-approval-ep-reject-input:focus {
-  border-color: #1976d2;
+  border-color: #2e7d32;
 }
 
 .tool-approval-ep-reject-btn {

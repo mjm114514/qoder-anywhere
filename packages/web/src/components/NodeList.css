@@ -46,7 +46,7 @@
 }
 
 .node-list-node-header--selected {
-  background: #e8f0fe;
+  background: #e8f5e9;
 }
 
 .node-list-chevron {
@@ -66,7 +66,7 @@
 .node-list-node-icon {
   font-size: 14px;
   flex-shrink: 0;
-  color: #1565c0;
+  color: #1b5e20;
 }
 
 .node-list-node-info {
@@ -122,11 +122,11 @@
 }
 
 .node-list-project-item--selected {
-  background: #e3f2fd;
+  background: #e8f5e9;
 }
 
 .node-list-project-item--selected:hover {
-  background: #bbdefb;
+  background: #c8e6c9;
 }
 
 .node-list-project-name {

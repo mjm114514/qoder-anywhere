@@ -87,8 +87,8 @@
 }
 
 .chat-input-attach:hover:not(:disabled) {
-  border-color: #1976d2;
-  color: #1976d2;
+  border-color: #2e7d32;
+  color: #2e7d32;
 }
 
 .chat-input-attach:disabled {
@@ -128,7 +128,7 @@
 }
 
 .chat-input-model:focus {
-  border-color: #1976d2;
+  border-color: #2e7d32;
 }
 
 .chat-input-model:disabled {
@@ -184,7 +184,7 @@
 }
 
 .chat-input-textarea:focus {
-  border-color: #1976d2;
+  border-color: #2e7d32;
 }
 
 .chat-input-textarea:disabled {
@@ -200,7 +200,7 @@
   align-items: center;
   justify-content: center;
   padding: 0 16px;
-  background: #1976d2;
+  background: #2e7d32;
   color: #fff;
   border: none;
   border-radius: 8px;
@@ -218,7 +218,7 @@
 }
 
 .chat-input-send:hover:not(:disabled) {
-  background: #1565c0;
+  background: #1b5e20;
 }
 
 .chat-input-send:disabled {

@@ -38,11 +38,11 @@
 }
 
 .project-list-item--selected {
-  background: #e3f2fd;
+  background: #e8f5e9;
 }
 
 .project-list-item--selected:hover {
-  background: #bbdefb;
+  background: #c8e6c9;
 }
 
 .project-list-item-name {
@@ -63,6 +63,6 @@
 }
 
 .project-list-terminal-badge {
-  color: #1565c0;
+  color: #1b5e20;
   font-weight: 500;
 }

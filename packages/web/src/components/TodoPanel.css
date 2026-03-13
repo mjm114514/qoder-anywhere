@@ -121,7 +121,7 @@
 }
 
 .todo-item--in_progress {
-  color: #1a73e8;
+  color: #43a047;
 }
 
 /* ── Checkbox indicator (pure CSS) ── */
@@ -140,7 +140,7 @@
 
 /* in_progress — blue circle with dot */
 .todo-item--in_progress .todo-item-check {
-  border-color: #1a73e8;
+  border-color: #43a047;
 }
 
 .todo-item--in_progress .todo-item-check::after {
@@ -152,7 +152,7 @@
   height: 6px;
   transform: translate(-50%, -50%);
   border-radius: 50%;
-  background: #1a73e8;
+  background: #43a047;
 }
 
 /* completed — filled circle with checkmark */
