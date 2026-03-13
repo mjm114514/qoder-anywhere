@@ -1,8 +1,4 @@
 import { Router } from "express";
-import {
-  listSessions,
-  getSessionMessages,
-} from "@anthropic-ai/claude-agent-sdk";
 import type {
   CreateSessionRequest,
   UpdateSessionRequest,
@@ -27,22 +23,32 @@ export function createSessionRoutes(sessionManager: SessionManager): Router {
         return;
       }
 
-      const limit = parseInt(req.query.limit as string) || 50;
-      const sessions = await listSessions({ dir: cwd, limit });
+      let sessions: Array<{
+        sessionId: string;
+        title?: string;
+        workingDir?: string;
+        createdAt?: number;
+        updatedAt?: number;
+      }>;
+      try {
+        sessions = await sessionManager.listSessions({ cwd });
+      } catch {
+        sessions = [];
+      }
 
       const diskIds = new Set(sessions.map((s) => s.sessionId));
 
       const result = sessions.map((s) => ({
         sessionId: s.sessionId,
-        summary: s.summary,
-        lastModified: s.lastModified,
-        fileSize: s.fileSize,
-        cwd: s.cwd,
-        gitBranch: s.gitBranch,
+        summary: s.title ?? "",
+        lastModified: s.updatedAt ?? 0,
+        fileSize: 0,
+        cwd: s.workingDir,
+        gitBranch: undefined as string | undefined,
         state: sessionManager.getState(s.sessionId),
       }));
 
-      // Merge in-memory sessions that haven't been persisted to disk yet
+      // Merge in-memory sessions that haven't been persisted yet
       for (const active of sessionManager.getActiveSessionsByCwd(cwd)) {
         if (!diskIds.has(active.sessionId)) {
           result.unshift({
@@ -67,25 +73,27 @@ export function createSessionRoutes(sessionManager: SessionManager): Router {
   router.get("/:session_id", async (req, res, next) => {
     try {
       const sessionId = req.params.session_id as string;
-      const limit = parseInt(req.query.limit as string) || 100;
-      const offset = parseInt(req.query.offset as string) || 0;
 
-      const messages = await getSessionMessages(sessionId, { limit, offset });
+      // Try to load session info from disk
+      let summary = "";
+      let lastModified = 0;
+      const messages: Array<Record<string, unknown>> = [];
 
-      // Get summary from listSessions (no dir — searches all)
-      const allSessions = await listSessions({});
-      const sessionInfo = allSessions.find((s) => s.sessionId === sessionId);
+      try {
+        const allSessions = await sessionManager.listSessions({});
+        const sessionInfo = allSessions.find((s) => s.sessionId === sessionId);
+        summary = sessionInfo?.title ?? "";
+        lastModified = sessionInfo?.updatedAt ?? 0;
+      } catch {
+        // Ignore — session info not available
+      }
 
       res.json({
         sessionId,
-        summary: sessionInfo?.summary ?? "",
-        lastModified: sessionInfo?.lastModified ?? 0,
+        summary,
+        lastModified,
         state: sessionManager.getState(sessionId),
-        messages: messages.map((m) => ({
-          type: m.type,
-          uuid: m.uuid,
-          message: m.message,
-        })),
+        messages,
       });
     } catch (err) {
       next(err);
@@ -124,7 +132,7 @@ export function createSessionRoutes(sessionManager: SessionManager): Router {
         images: body.images,
       });
 
-      // Wait for SDK init message to provide the sessionId
+      // Session ID is available synchronously after createSession with ACP
       const sessionId = await session.sessionIdReady;
 
       res.json({ sessionId });

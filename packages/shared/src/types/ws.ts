@@ -1,4 +1,61 @@
-import type { SDKMessage } from "@anthropic-ai/claude-agent-sdk";
+// ── WsAgentMessage ──
+// Discriminated union on `type` field so the frontend switch/case logic works unchanged.
+
+export type WsAgentMessage =
+  | WsAssistantMessage
+  | WsStreamEvent
+  | WsUserMessage
+  | WsToolProgress
+  | WsResultMessage
+  | WsSystemMessage;
+
+export interface WsAssistantMessage {
+  type: "assistant";
+  uuid: string;
+  message: {
+    role: "assistant";
+    content: unknown;
+  };
+  parent_tool_use_id: string | null;
+  session_id: string;
+}
+
+export interface WsStreamEvent {
+  type: "stream_event";
+  event: unknown;
+  parent_tool_use_id: string | null;
+}
+
+export interface WsUserMessage {
+  type: "user";
+  uuid: string;
+  message: {
+    role: "user";
+    content: unknown;
+  };
+  tool_use_result?: boolean;
+  parent_tool_use_id: string | null;
+  session_id: string;
+}
+
+export interface WsToolProgress {
+  type: "tool_progress";
+  tool_use_id: string;
+  content: string;
+}
+
+export interface WsResultMessage {
+  type: "result";
+  result: unknown;
+  session_id: string;
+}
+
+export interface WsSystemMessage {
+  type: "system";
+  subtype: string;
+  session_id?: string;
+  [key: string]: unknown;
+}
 
 // ── Permission mode ──
 
@@ -63,7 +120,7 @@ export interface AskUserQuestionItem {
 
 export interface WSSdkMessage {
   category: "sdk";
-  message: SDKMessage;
+  message: WsAgentMessage;
 }
 
 export interface WSControlMessage {

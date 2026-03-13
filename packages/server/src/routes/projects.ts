@@ -12,7 +12,7 @@ export function createProjectRoutes(
   // GET /api/projects
   router.get("/", async (_req, res, next) => {
     try {
-      const projects = await scanProjects();
+      const projects = await scanProjects(sessionManager);
 
       // Enrich with live active counts from in-memory managers
       const enriched = projects.map((item) => ({

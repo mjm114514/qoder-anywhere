@@ -1,35 +1,31 @@
-import {
-  query,
-  getSessionMessages,
-  type Query,
-  type SDKMessage,
-  type CanUseTool,
-  type SDKAssistantMessage,
-  type SDKUserMessage,
-  type SDKUserMessageReplay,
-  type PermissionMode,
-} from "@anthropic-ai/claude-agent-sdk";
 import { EventEmitter } from "node:events";
 import { randomUUID } from "node:crypto";
 import type WebSocket from "ws";
 import type {
   SessionState,
-  AskUserQuestionItem,
   TodoItem,
   UserImageAttachment,
   WSServerMessage,
-  WSSdkMessage,
   WSControlMessage,
   ControlPayload,
+  WsAgentMessage,
+  PermissionMode,
 } from "@lgtm-anywhere/shared";
+import type {
+  SessionNotification,
+  RequestPermissionRequest,
+  RequestPermissionResponse,
+  PromptResponse,
+} from "@agentclientprotocol/sdk";
 import { config } from "../config.js";
-import { MessageQueue } from "./message-queue.js";
+import { AcpConnection } from "./acp-connection.js";
+import { AcpTranslator } from "./acp-translator.js";
+import {
+  listSessionsFromDisk,
+  type DiskSessionInfo,
+} from "./session-disk-reader.js";
 
 // ── Envelope helpers ──
-
-function sdkMsg(message: SDKMessage): WSSdkMessage {
-  return { category: "sdk", message };
-}
 
 function controlMsg(message: ControlPayload): WSControlMessage {
   return { category: "control", message };
@@ -48,52 +44,17 @@ function sdkMessageKind(entry: WSServerMessage): string | null {
   return m.type;
 }
 
-/**
- * Determine whether an SDK message should be forwarded (cached + broadcast).
- * Returns false for messages we intentionally drop or handle separately.
- */
-function shouldForwardSdkMessage(message: SDKMessage): boolean {
-  switch (message.type) {
-    case "system": {
-      const sub = "subtype" in message ? message.subtype : undefined;
-      if (sub === "init") return true;
-      if (sub === "status") return false; // transient — handled separately
-      if (
-        sub === "task_started" ||
-        sub === "task_progress" ||
-        sub === "task_notification"
-      ) {
-        // Only forward task messages that have a tool_use_id (subagent tasks)
-        return !!(message as { tool_use_id?: string }).tool_use_id;
-      }
-      return false;
-    }
-    case "assistant":
-    case "stream_event":
-    case "tool_progress":
-    case "result":
-      return true;
-    case "user": {
-      const userMsg = message as SDKUserMessage | SDKUserMessageReplay;
-      return userMsg.tool_use_result !== undefined;
-    }
-    default:
-      return false;
-  }
-}
-
 export interface ActiveSession {
   sessionId: string;
   cwd: string;
-  query: Query;
-  messageQueue: MessageQueue;
-  abortController: AbortController;
+  connection: AcpConnection;
+  translator: AcpTranslator;
   state: "active" | "idle";
   model?: string;
   createdAt: number;
   lastActivityAt: number;
   wsClients: Set<WebSocket>;
-  /** Resolves with the sessionId once the SDK init message arrives */
+  /** Resolves with the sessionId once the ACP newSession responds */
   sessionIdReady: Promise<string>;
   /** Call this to resolve sessionIdReady (set internally) */
   resolveSessionId: (id: string) => void;
@@ -120,6 +81,10 @@ export interface ActiveSession {
   messageCache: WSServerMessage[];
   /** Current todo list maintained via TodoWrite tool interceptions */
   currentTodos: TodoItem[];
+  /** In-flight prompt promise (null when idle) */
+  promptInFlight: Promise<PromptResponse> | null;
+  /** Available session modes from newSession response */
+  availableModes?: Array<{ slug: string; name: string; description?: string }>;
 }
 
 export interface CreateSessionOptions {
@@ -195,20 +160,17 @@ export class SessionManager extends EventEmitter {
     cwd: string,
     options: CreateSessionOptions,
   ): Promise<ActiveSession> {
-    const messageQueue = new MessageQueue();
-    const abortController = new AbortController();
-
     const { sessionIdReady, resolveSessionId } = makeSessionIdHook();
 
     const permMode: PermissionMode =
       (options.permissionMode as PermissionMode) ?? "bypassPermissions";
 
+    // Create a placeholder session (connection/translator set below)
     const session: ActiveSession = {
-      sessionId: "", // will be set from init message
+      sessionId: "",
       cwd,
-      query: null as unknown as Query, // set below after canUseTool is ready
-      messageQueue,
-      abortController,
+      connection: null as unknown as AcpConnection,
+      translator: null as unknown as AcpTranslator,
       state: "active",
       model: options.model,
       createdAt: Date.now(),
@@ -221,32 +183,48 @@ export class SessionManager extends EventEmitter {
       permissionMode: permMode,
       messageCache: [],
       currentTodos: [],
+      promptInFlight: null,
     };
 
-    console.log("start query");
-    const q = query({
-      prompt: messageQueue,
-      options: {
-        cwd,
-        model: options.model,
-        permissionMode: permMode as PermissionMode,
-        allowDangerouslySkipPermissions: true,
-        allowedTools: options.allowedTools,
-        systemPrompt: options.systemPrompt,
-        maxTurns: options.maxTurns,
-        abortController,
-        includePartialMessages: true,
-        canUseTool: this.makeCanUseTool(session),
-      },
+    // Create ACP connection with callbacks
+    const connection = this.createAcpConnection(session);
+    session.connection = connection;
+
+    console.log("[ACP] Starting agent subprocess...");
+    await connection.start();
+    await connection.initialize();
+    console.log("[ACP] Agent initialized");
+
+    // Create a new session via ACP
+    const newSessionResult = await connection.newSession({ cwd });
+    const acpSessionId = newSessionResult.sessionId;
+    session.sessionId = acpSessionId;
+
+    // Store available modes if returned (may be present as an extension field)
+    const resultExt = newSessionResult as Record<string, unknown>;
+    if (resultExt.availableModes && Array.isArray(resultExt.availableModes)) {
+      session.availableModes =
+        resultExt.availableModes as ActiveSession["availableModes"];
+    }
+
+    // Create translator now that we have the sessionId
+    session.translator = new AcpTranslator(acpSessionId, (msg) =>
+      this.handleTranslatorMessage(session, msg),
+    );
+
+    // Register session
+    this.activeSessions.set(acpSessionId, session);
+    resolveSessionId(acpSessionId);
+    this.emit("session_state", {
+      sessionId: acpSessionId,
+      state: "active" as SessionState,
     });
-    console.log("query created");
+    this.emit("session_created", {
+      sessionId: acpSessionId,
+      cwd: session.cwd,
+    });
 
-    session.query = q;
-
-    // Push the first user message immediately
-    session.messageQueue.push(options.message, options.images);
-
-    // Cache the first user message (not yet persisted)
+    // Cache the first user message
     session.messageCache.push(
       controlMsg({
         type: "session_message",
@@ -255,10 +233,10 @@ export class SessionManager extends EventEmitter {
       }),
     );
 
-    // Start consuming messages in the background (handles init + ongoing)
-    this.runSession(session, q);
+    // Send the first prompt (don't await — runs in background)
+    this.runPrompt(session, options.message);
 
-    console.log("session created, waiting for sessionId via sessionIdReady");
+    console.log(`[ACP] Session created: ${acpSessionId}`);
     return session;
   }
 
@@ -271,14 +249,14 @@ export class SessionManager extends EventEmitter {
     let session = this.activeSessions.get(sessionId);
 
     if (!session) {
-      // Reactivate: waits for init, then pushes message
+      // Reactivate: create new connection, load session, then send
       session = await this.reactivateSession(sessionId, cwd, message, images);
     } else {
-      // Session already active/idle — transport is ready, safe to push
-      session.messageQueue.push(message, images);
+      // Session already active/idle — send prompt directly
+      this.runPrompt(session, message);
     }
 
-    // Cache and broadcast the user message (not yet persisted by SDK).
+    // Cache and broadcast the user message
     const pending = controlMsg({
       type: "session_message",
       message,
@@ -301,21 +279,16 @@ export class SessionManager extends EventEmitter {
     sessionId: string,
     cwd: string,
     firstMessage: string,
-    images?: UserImageAttachment[],
+    _images?: UserImageAttachment[],
   ): Promise<ActiveSession> {
-    const messageQueue = new MessageQueue();
-    const abortController = new AbortController();
-
-    // sessionId is already known for reactivation — resolve immediately
     const { sessionIdReady, resolveSessionId } = makeSessionIdHook();
     resolveSessionId(sessionId);
 
     const session: ActiveSession = {
       sessionId,
       cwd,
-      query: null as unknown as Query,
-      messageQueue,
-      abortController,
+      connection: null as unknown as AcpConnection,
+      translator: null as unknown as AcpTranslator,
       state: "active",
       createdAt: Date.now(),
       lastActivityAt: Date.now(),
@@ -327,37 +300,83 @@ export class SessionManager extends EventEmitter {
       permissionMode: "bypassPermissions",
       messageCache: [],
       currentTodos: [],
+      promptInFlight: null,
     };
 
-    const q = query({
-      prompt: messageQueue,
-      options: {
-        resume: sessionId,
-        cwd,
-        permissionMode: "bypassPermissions" as PermissionMode,
-        allowDangerouslySkipPermissions: true,
-        abortController,
-        includePartialMessages: true,
-        canUseTool: this.makeCanUseTool(session),
-      },
-    });
+    // Create ACP connection
+    const connection = this.createAcpConnection(session);
+    session.connection = connection;
 
-    session.query = q;
+    await connection.start();
+    await connection.initialize();
+
+    // Create translator
+    session.translator = new AcpTranslator(sessionId, (msg) =>
+      this.handleTranslatorMessage(session, msg),
+    );
 
     this.activeSessions.set(sessionId, session);
     this.emit("session_state", { sessionId, state: "active" as SessionState });
 
-    // Seed cache with history so WS subscribers get full conversation on replay
-    const historyEvents = await this.convertHistoryToWSEvents(sessionId);
-    session.messageCache = historyEvents;
+    // Load session history via ACP — history replays through sessionUpdate callbacks
+    try {
+      await connection.loadSession({ sessionId, cwd });
+    } catch (err) {
+      console.error("[ACP] Failed to load session:", err);
+    }
 
-    // Push the first message immediately (caching is handled by sendMessage)
-    session.messageQueue.push(firstMessage, images);
-
-    // Start consuming in the background (init will be handled inline)
-    this.runSession(session, q);
+    // The translator will have emitted history messages via sessionUpdate.
+    // Now send the new message.
+    this.runPrompt(session, firstMessage);
 
     return session;
+  }
+
+  /**
+   * List sessions by reading directly from disk (~/.qoder/projects/).
+   * No ACP subprocess needed.
+   */
+  async listSessions(params?: { cwd?: string }): Promise<DiskSessionInfo[]> {
+    return listSessionsFromDisk(params);
+  }
+
+  /**
+   * Load session history via ACP and convert to WSServerMessages for replay.
+   * Creates a temporary connection to load the session.
+   */
+  async convertHistoryToWSEvents(
+    sessionId: string,
+  ): Promise<WSServerMessage[]> {
+    const events: WSServerMessage[] = [];
+
+    // Create a temporary translator that collects messages into events
+    const translator = new AcpTranslator(sessionId, (msg) => {
+      events.push(msg);
+    });
+
+    // Create a temporary connection
+    const tempConnection = new AcpConnection({
+      command: config.agentCommand,
+      args: config.agentArgs,
+      onSessionUpdate: (notification) => {
+        translator.handleSessionUpdate(notification);
+      },
+      onRequestPermission: async () => ({
+        outcome: { outcome: "cancelled" as const },
+      }),
+    });
+
+    try {
+      await tempConnection.start();
+      await tempConnection.initialize();
+      await tempConnection.loadSession({ sessionId });
+    } catch (err) {
+      console.error("[ACP] Failed to load session history:", err);
+    } finally {
+      await tempConnection.close();
+    }
+
+    return events;
   }
 
   subscribeWS(sessionId: string, ws: WebSocket): boolean {
@@ -413,9 +432,13 @@ export class SessionManager extends EventEmitter {
     }
     session.wsClients.clear();
 
-    // Close message queue and query
-    session.messageQueue.close();
-    session.query.close();
+    // Cancel any in-flight prompt and close the connection
+    try {
+      await session.connection.cancel({ sessionId });
+    } catch {
+      // Ignore — process might already be dead
+    }
+    await session.connection.close();
 
     this.activeSessions.delete(sessionId);
     this.emit("session_state", {
@@ -427,7 +450,7 @@ export class SessionManager extends EventEmitter {
   async setModel(sessionId: string, model: string): Promise<void> {
     const session = this.activeSessions.get(sessionId);
     if (session) {
-      await session.query.setModel(model);
+      await session.connection.setSessionModel({ sessionId, model });
       session.model = model;
     }
   }
@@ -482,7 +505,7 @@ export class SessionManager extends EventEmitter {
 
   /**
    * Change the permission mode for a session at runtime.
-   * Mirrors setModel() — calls SDK setPermissionMode + broadcasts to clients.
+   * Uses ACP setSessionMode + broadcasts to clients.
    * When switching to bypassPermissions, auto-approves all pending tool approvals.
    */
   async setPermissionMode(
@@ -492,7 +515,16 @@ export class SessionManager extends EventEmitter {
     const session = this.activeSessions.get(sessionId);
     if (!session) return;
 
-    await session.query.setPermissionMode(mode);
+    // Map our PermissionMode to ACP mode slug
+    const acpMode = mapPermissionModeToAcpMode(mode);
+    if (acpMode) {
+      try {
+        await session.connection.setSessionMode({ sessionId, mode: acpMode });
+      } catch {
+        // Agent may not support setSessionMode — fall through
+      }
+    }
+
     session.permissionMode = mode;
 
     // If switching to bypass mode, auto-approve all pending tool approvals
@@ -517,194 +549,215 @@ export class SessionManager extends EventEmitter {
     );
   }
 
-  /**
-   * Convert persisted session messages from the SDK into WS messages for replay.
-   */
-  async convertHistoryToWSEvents(
-    sessionId: string,
-  ): Promise<WSServerMessage[]> {
-    const messages = await getSessionMessages(sessionId, { limit: 1000 });
-    const events: WSServerMessage[] = [];
-    let lastTodos: TodoItem[] | null = null;
+  // ── Private: ACP connection factory ──
 
-    for (const m of messages) {
-      if (m.type === "assistant") {
-        // Reconstruct as SDK-shaped message for passthrough
-        events.push(
-          sdkMsg({
-            type: "assistant",
-            uuid: m.uuid,
-            message: m.message,
-            parent_tool_use_id: m.parent_tool_use_id ?? null,
-            session_id: m.session_id ?? sessionId,
-          } as SDKAssistantMessage),
+  private createAcpConnection(session: ActiveSession): AcpConnection {
+    return new AcpConnection({
+      command: config.agentCommand,
+      args: config.agentArgs,
+      onSessionUpdate: (notification: SessionNotification) => {
+        // Route through translator if available
+        if (session.translator) {
+          session.translator.handleSessionUpdate(notification);
+        }
+      },
+      onRequestPermission: (
+        params: RequestPermissionRequest,
+      ): Promise<RequestPermissionResponse> => {
+        return this.handleRequestPermission(session, params);
+      },
+      onProcessExit: (code, signal) => {
+        console.log(
+          `[ACP] Process exited: code=${code}, signal=${signal}, session=${session.sessionId}`,
         );
-
-        // Scan assistant message content blocks for the last TodoWrite tool_use
-        const msg = m.message as Record<string, unknown> | undefined;
-        if (msg && Array.isArray(msg.content)) {
-          for (const block of msg.content as Array<Record<string, unknown>>) {
-            if (block.type === "tool_use" && block.name === "TodoWrite") {
-              const blockInput = block.input as
-                | Record<string, unknown>
-                | undefined;
-              if (blockInput && Array.isArray(blockInput.todos)) {
-                lastTodos = blockInput.todos as TodoItem[];
-              }
-            }
-          }
+        // Clean up the session
+        if (this.activeSessions.has(session.sessionId)) {
+          this.activeSessions.delete(session.sessionId);
+          this.emit("session_state", {
+            sessionId: session.sessionId,
+            state: "inactive" as SessionState,
+          });
         }
-      } else if (m.type === "user") {
-        if (isToolResultMessage(m.message)) {
-          events.push(
-            sdkMsg({
-              type: "user",
-              uuid: m.uuid,
-              message: m.message,
-              parent_tool_use_id: m.parent_tool_use_id ?? null,
-              session_id: m.session_id ?? sessionId,
-            } as unknown as SDKUserMessage),
-          );
-        } else {
-          const text = extractUserText(m.message);
-          const images = extractUserImages(m.message);
-          if (text || images.length > 0) {
-            events.push(
-              controlMsg({
-                type: "session_message",
-                message: text,
-                ...(images.length > 0 ? { images } : {}),
-              }),
-            );
-          }
-        }
-      }
-    }
-
-    // Append the last todo state so clients can restore the todo panel
-    if (lastTodos) {
-      events.push(controlMsg({ type: "todo_update", todos: lastTodos }));
-    }
-
-    return events;
+      },
+    });
   }
+
+  // ── Private: ACP requestPermission handler ──
 
   /**
-   * Build a canUseTool callback for a session.
-   * Intercepts AskUserQuestion to broadcast to WS clients and wait for user answer.
-   * In non-bypass modes, broadcasts tool approval requests and waits for user decision.
+   * Handle ACP requestPermission requests from the agent.
+   * Maps ACP permission options to our existing tool approval / AskUserQuestion flow.
    */
-  private makeCanUseTool(session: ActiveSession): CanUseTool {
-    return async (toolName, input, options) => {
-      if (toolName === "AskUserQuestion") {
-        const requestId = randomUUID();
-        const questions = (input.questions ?? []) as AskUserQuestionItem[];
+  private handleRequestPermission(
+    session: ActiveSession,
+    params: RequestPermissionRequest,
+  ): Promise<RequestPermissionResponse> {
+    const toolCall = params.toolCall as Record<string, unknown> | undefined;
+    const toolCallId = toolCall?.toolCallId as string | undefined;
+    const toolName = (toolCall?.title as string) ?? "unknown_tool";
+    const rawInput = (toolCall?.rawInput as Record<string, unknown>) ?? {};
+    const options = (params.options ?? []) as Array<{
+      kind: string;
+      name: string;
+      optionId: string;
+    }>;
 
-        // Cache & broadcast question to all connected WS clients
-        const cached = controlMsg({
-          type: "ask_user_question",
-          requestId,
-          questions,
-        });
-        session.messageCache.push(cached);
-        this.broadcast(session, cached);
+    // bypassPermissions mode: auto-allow
+    if (session.permissionMode === "bypassPermissions") {
+      const allowOption = options.find(
+        (o) => o.kind === "allow_once" || o.kind === "allow_always",
+      );
+      return Promise.resolve({
+        outcome: {
+          outcome: "selected" as const,
+          optionId: allowOption?.optionId ?? options[0]?.optionId ?? "allow",
+        },
+      });
+    }
 
-        // Wait for the user to answer
-        const answers = await new Promise<Record<string, string>>((resolve) => {
-          session.pendingQuestions.set(requestId, { input, resolve });
-        });
+    // Non-bypass mode: broadcast tool approval request and wait for user decision
+    const requestId = randomUUID();
 
-        // Remove the cached question so it won't replay after being answered
-        const idx = session.messageCache.indexOf(cached);
-        if (idx !== -1) session.messageCache.splice(idx, 1);
+    // Cache & broadcast approval request
+    const cached = controlMsg({
+      type: "tool_approval_request",
+      requestId,
+      toolName,
+      toolUseId: toolCallId ?? requestId,
+      input: rawInput,
+    });
+    session.messageCache.push(cached);
+    this.broadcast(session, cached);
 
-        return {
-          behavior: "allow" as const,
-          updatedInput: {
-            questions: input.questions,
-            answers,
-          },
-        };
-      }
-
-      // bypassPermissions mode: auto-allow all other tools
-      if (session.permissionMode === "bypassPermissions") {
-        return {
-          behavior: "allow" as const,
-          updatedInput: input as Record<string, unknown>,
-        };
-      }
-
-      // Non-bypass mode: request tool approval from the user
-      const requestId = randomUUID();
-      const toolUseId =
-        typeof (options as Record<string, unknown>)?.tool_use_id === "string"
-          ? ((options as Record<string, unknown>).tool_use_id as string)
-          : requestId;
-      const decisionReason =
-        typeof (options as Record<string, unknown>)?.decision_reason ===
-        "string"
-          ? ((options as Record<string, unknown>).decision_reason as string)
-          : undefined;
-
-      // Cache & broadcast approval request
-      const cached = controlMsg({
-        type: "tool_approval_request",
-        requestId,
+    // Wait for user decision
+    return new Promise<RequestPermissionResponse>((resolve) => {
+      session.pendingToolApprovals.set(requestId, {
         toolName,
-        toolUseId,
-        input: input as Record<string, unknown>,
-        decisionReason,
-      });
-      session.messageCache.push(cached);
-      this.broadcast(session, cached);
+        input: rawInput,
+        resolve: (decision: { allow: boolean; denyMessage?: string }) => {
+          // Remove the cached approval request
+          const approvalIdx = session.messageCache.indexOf(cached);
+          if (approvalIdx !== -1) session.messageCache.splice(approvalIdx, 1);
 
-      // Wait for user decision (or abort)
-      const decision = await new Promise<{
-        allow: boolean;
-        denyMessage?: string;
-      }>((resolve) => {
-        session.pendingToolApprovals.set(requestId, {
-          toolName,
-          input: input as Record<string, unknown>,
-          resolve,
-        });
-
-        // Listen for abort signal to auto-deny
-        const signal = (options as Record<string, unknown>)
-          ?.signal as AbortSignal;
-        if (signal) {
-          const onAbort = () => {
-            if (session.pendingToolApprovals.has(requestId)) {
-              session.pendingToolApprovals.delete(requestId);
-              resolve({ allow: false, denyMessage: "Aborted" });
-            }
-          };
-          if (signal.aborted) {
-            onAbort();
+          if (decision.allow) {
+            const allowOption = options.find(
+              (o) => o.kind === "allow_once" || o.kind === "allow_always",
+            );
+            resolve({
+              outcome: {
+                outcome: "selected" as const,
+                optionId:
+                  allowOption?.optionId ?? options[0]?.optionId ?? "allow",
+              },
+            });
           } else {
-            signal.addEventListener("abort", onAbort, { once: true });
+            const rejectOption = options.find(
+              (o) => o.kind === "reject_once" || o.kind === "reject_always",
+            );
+            if (rejectOption) {
+              resolve({
+                outcome: {
+                  outcome: "selected" as const,
+                  optionId: rejectOption.optionId,
+                },
+              });
+            } else {
+              resolve({
+                outcome: { outcome: "cancelled" as const },
+              });
+            }
           }
-        }
+        },
       });
-
-      // Remove the cached approval request
-      const approvalIdx = session.messageCache.indexOf(cached);
-      if (approvalIdx !== -1) session.messageCache.splice(approvalIdx, 1);
-
-      if (decision.allow) {
-        return {
-          behavior: "allow" as const,
-          updatedInput: input as Record<string, unknown>,
-        };
-      } else {
-        return {
-          behavior: "deny" as const,
-          message: decision.denyMessage || "Tool call denied by user",
-        };
-      }
-    };
+    });
   }
+
+  // ── Private: prompt execution ──
+
+  /**
+   * Send a prompt to the ACP agent. Runs in the background.
+   * When the prompt completes, transitions session to idle.
+   */
+  private runPrompt(session: ActiveSession, message: string): void {
+    session.promptInFlight = session.connection
+      .prompt({ sessionId: session.sessionId, prompt: message })
+      .then((result) => {
+        // Prompt completed — flush translator and transition to idle
+        session.translator.handlePromptComplete(result.stopReason);
+
+        session.state = "idle";
+        session.lastActivityAt = Date.now();
+        session.promptInFlight = null;
+        this.emit("session_state", {
+          sessionId: session.sessionId,
+          state: "idle" as SessionState,
+        });
+        return result;
+      })
+      .catch((err) => {
+        session.promptInFlight = null;
+        this.broadcast(
+          session,
+          controlMsg({
+            type: "error",
+            error: err instanceof Error ? err.message : "Unknown error",
+            code: "PROMPT_ERROR",
+          }),
+        );
+        session.state = "idle";
+        session.lastActivityAt = Date.now();
+        this.emit("session_state", {
+          sessionId: session.sessionId,
+          state: "idle" as SessionState,
+        });
+        throw err;
+      });
+  }
+
+  // ── Private: translator message handler ──
+
+  /**
+   * Called by the AcpTranslator for each translated WSServerMessage.
+   * Caches and broadcasts the message to WS clients.
+   */
+  private handleTranslatorMessage(
+    session: ActiveSession,
+    msg: WSServerMessage,
+  ): void {
+    // Cache the message
+    session.messageCache.push(msg);
+
+    // Cache pruning: same logic as the old SDK-based approach
+    if (msg.category === "sdk") {
+      const kind = sdkMessageKind(msg);
+
+      // When a complete assistant message arrives, prune stream_events
+      if (kind === "assistant") {
+        this.pruneSdkMessages(session.messageCache, "stream_event");
+      }
+
+      // When a tool_result arrives, prune tool_progress events
+      if (msg.message.type === "user" && "tool_use_result" in msg.message) {
+        this.pruneSdkMessages(session.messageCache, "tool_progress");
+      }
+
+      // Extract TodoWrite calls from assistant messages
+      if (msg.message.type === "assistant") {
+        const todos = extractTodosFromAssistant(msg.message);
+        if (todos) {
+          session.currentTodos = todos;
+          const todoMsg = controlMsg({ type: "todo_update", todos });
+          session.messageCache.push(todoMsg);
+          this.broadcast(session, todoMsg);
+        }
+      }
+    }
+
+    // Broadcast to WS clients
+    this.broadcast(session, msg);
+  }
+
+  // ── Private: WS helpers ──
 
   private sendWS(ws: WebSocket, msg: WSServerMessage): void {
     if (ws.readyState === ws.OPEN) {
@@ -723,8 +776,6 @@ export class SessionManager extends EventEmitter {
 
   /**
    * Remove all cached SDK messages of the given kind from the cache.
-   * Called when a finalized message arrives that supersedes transient events
-   * (e.g., stream_event deltas are superseded by the complete assistant message).
    */
   private pruneSdkMessages(cache: WSServerMessage[], kind: string): void {
     for (let i = cache.length - 2; i >= 0; i--) {
@@ -734,160 +785,7 @@ export class SessionManager extends EventEmitter {
     }
   }
 
-  /**
-   * Remove cached SDK messages matching a predicate.
-   * Used for targeted pruning (e.g., removing task_progress for a specific task_id).
-   */
-  private pruneSdkMessagesByPredicate(
-    cache: WSServerMessage[],
-    predicate: (entry: WSServerMessage) => boolean,
-  ): void {
-    for (let i = cache.length - 2; i >= 0; i--) {
-      if (predicate(cache[i])) {
-        cache.splice(i, 1);
-      }
-    }
-  }
-
-  /**
-   * Continuously consume messages from the query and broadcast to WS clients.
-   * Also handles the init message (sets sessionId, registers in map).
-   * Runs in the background (not awaited).
-   */
-  private async runSession(session: ActiveSession, q: Query): Promise<void> {
-    try {
-      for await (const message of q) {
-        // Handle init message: set sessionId and register
-        if (
-          message.type === "system" &&
-          "subtype" in message &&
-          message.subtype === "init"
-        ) {
-          if (!session.sessionId) {
-            session.sessionId = message.session_id;
-            this.activeSessions.set(session.sessionId, session);
-            this.emit("session_state", {
-              sessionId: session.sessionId,
-              state: "active" as SessionState,
-            });
-            this.emit("session_created", {
-              sessionId: session.sessionId,
-              cwd: session.cwd,
-            });
-          }
-          session.resolveSessionId(message.session_id);
-
-          // Sync permissionMode from SDK init message
-          const initPerm = (message as unknown as { permissionMode?: string })
-            .permissionMode;
-          if (initPerm) {
-            session.permissionMode =
-              initPerm as ActiveSession["permissionMode"];
-          }
-        }
-
-        // Status events are transient — broadcast live but don't cache
-        // (they have no replay value for reconnecting clients)
-        if (
-          message.type === "system" &&
-          "subtype" in message &&
-          message.subtype === "status"
-        ) {
-          // Sync permissionMode from SDK status message (e.g. ExitPlanMode)
-          const statusPerm = (message as unknown as { permissionMode?: string })
-            .permissionMode;
-          if (statusPerm) {
-            session.permissionMode =
-              statusPerm as ActiveSession["permissionMode"];
-          }
-
-          this.broadcast(session, sdkMsg(message));
-          continue;
-        }
-
-        // Forward SDK messages that pass the filter
-        if (shouldForwardSdkMessage(message)) {
-          const wrapped = sdkMsg(message);
-          session.messageCache.push(wrapped);
-
-          // When a complete assistant message arrives, remove preceding
-          // stream_event chunks from cache — the assistant message contains
-          // the final content, so streaming deltas are redundant for replay.
-          if (message.type === "assistant") {
-            this.pruneSdkMessages(session.messageCache, "stream_event");
-          }
-
-          // When a tool_result arrives, remove preceding tool_progress
-          // events — they are transient progress indicators.
-          if (
-            message.type === "user" &&
-            (message as SDKUserMessage).tool_use_result !== undefined
-          ) {
-            this.pruneSdkMessages(session.messageCache, "tool_progress");
-          }
-
-          // When a task_notification arrives, prune preceding task_progress
-          // events for the same task_id — they are superseded by the final notification.
-          if (
-            message.type === "system" &&
-            "subtype" in message &&
-            message.subtype === "task_notification"
-          ) {
-            const taskId = (message as { task_id: string }).task_id;
-            this.pruneSdkMessagesByPredicate(session.messageCache, (entry) => {
-              if (sdkMessageKind(entry) !== "task_progress") return false;
-              return (
-                ((entry as WSSdkMessage).message as { task_id: string })
-                  .task_id === taskId
-              );
-            });
-          }
-
-          this.broadcast(session, wrapped);
-        }
-
-        // Extract TodoWrite calls from assistant messages.
-        // canUseTool is never called for TodoWrite (SDK auto-allows it),
-        // so we detect it from the finalized assistant message content blocks.
-        if (message.type === "assistant") {
-          const todos = extractTodosFromAssistant(message);
-          if (todos) {
-            session.currentTodos = todos;
-            const todoMsg = controlMsg({ type: "todo_update", todos });
-            session.messageCache.push(todoMsg);
-            this.broadcast(session, todoMsg);
-          }
-        }
-
-        // result means this turn is done → IDLE
-        if (message.type === "result") {
-          session.state = "idle";
-          session.lastActivityAt = Date.now();
-          this.emit("session_state", {
-            sessionId: session.sessionId,
-            state: "idle" as SessionState,
-          });
-          // Don't break — generator stays alive, waiting for next message from queue
-        }
-      }
-    } catch (err) {
-      this.broadcast(
-        session,
-        controlMsg({
-          type: "error",
-          error: err instanceof Error ? err.message : "Unknown error",
-          code: "QUERY_ERROR",
-        }),
-      );
-    }
-
-    // Generator exited → process terminated
-    this.activeSessions.delete(session.sessionId);
-    this.emit("session_state", {
-      sessionId: session.sessionId,
-      state: "inactive" as SessionState,
-    });
-  }
+  // ── Lifecycle ──
 
   private recycle(): void {
     const now = Date.now();
@@ -911,65 +809,33 @@ export class SessionManager extends EventEmitter {
   }
 }
 
-/** Check if a user message contains tool_result content blocks. */
-function isToolResultMessage(message: unknown): boolean {
-  if (!message || typeof message !== "object") return false;
-  const msg = message as Record<string, unknown>;
-  if (!Array.isArray(msg.content)) return false;
-  return (msg.content as Array<Record<string, unknown>>).some(
-    (b) => b.type === "tool_result",
-  );
-}
+// ── Module-level helpers ──
 
-/** Extract plain text from a user message. */
-function extractUserText(message: unknown): string {
-  if (!message || typeof message !== "object") return "";
-  const msg = message as Record<string, unknown>;
-  if (typeof msg.content === "string") return msg.content;
-  if (Array.isArray(msg.content)) {
-    return (msg.content as Array<Record<string, unknown>>)
-      .filter((b) => b.type === "text" && typeof b.text === "string")
-      .map((b) => b.text as string)
-      .join("");
+/** Map our PermissionMode to ACP mode slug. */
+function mapPermissionModeToAcpMode(mode: PermissionMode): string | null {
+  switch (mode) {
+    case "default":
+      return "code";
+    case "acceptEdits":
+      return "acceptEdits";
+    case "bypassPermissions":
+      return "trust";
+    case "plan":
+      return "plan";
+    case "dontAsk":
+      return "dontAsk";
+    default:
+      return null;
   }
-  return "";
-}
-
-/** Extract base64 image attachments from a user message. */
-function extractUserImages(
-  message: unknown,
-): Array<{ media_type: string; data: string }> {
-  if (!message || typeof message !== "object") return [];
-  const msg = message as Record<string, unknown>;
-  if (!Array.isArray(msg.content)) return [];
-  const images: Array<{ media_type: string; data: string }> = [];
-  for (const block of msg.content as Array<Record<string, unknown>>) {
-    if (
-      block.type === "image" &&
-      block.source &&
-      typeof block.source === "object"
-    ) {
-      const src = block.source as Record<string, unknown>;
-      if (
-        src.type === "base64" &&
-        typeof src.media_type === "string" &&
-        typeof src.data === "string"
-      ) {
-        images.push({ media_type: src.media_type, data: src.data });
-      }
-    }
-  }
-  return images;
 }
 
 /**
- * Extract TodoWrite todos from an assistant SDK message.
+ * Extract TodoWrite todos from a translated assistant WsAgentMessage.
  * Returns the todos array if a TodoWrite tool_use block is found, null otherwise.
  */
-function extractTodosFromAssistant(message: SDKMessage): TodoItem[] | null {
-  const msg = (message as SDKAssistantMessage).message as
-    | Record<string, unknown>
-    | undefined;
+function extractTodosFromAssistant(message: WsAgentMessage): TodoItem[] | null {
+  if (message.type !== "assistant") return null;
+  const msg = message.message as Record<string, unknown> | undefined;
   if (!msg || !Array.isArray(msg.content)) return null;
 
   for (const block of msg.content as Array<Record<string, unknown>>) {

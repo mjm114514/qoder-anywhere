@@ -1,6 +1,3 @@
-// Allow SDK to spawn Claude Code even when running inside a Claude Code session
-delete process.env.CLAUDECODE;
-
 import { createApp } from "./app.js";
 import { SessionManager } from "./services/session-manager.js";
 import { TerminalManager } from "./terminal/terminal-manager.js";

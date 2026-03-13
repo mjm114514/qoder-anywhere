@@ -6,8 +6,8 @@ import type {
   UserImageAttachment,
   TodoItem,
   PermissionMode,
+  WsAgentMessage,
 } from "@lgtm-anywhere/shared";
-import type { SDKMessage } from "@anthropic-ai/claude-agent-sdk";
 import { fetchWsToken, buildWsUrl } from "../api";
 
 // ── Subagent state ──
@@ -180,7 +180,7 @@ export function useSessionSocket(
   // ── SDK message handler ──
 
   const handleSdkMessage = useCallback(
-    (sdk: SDKMessage) => {
+    (sdk: WsAgentMessage) => {
       switch (sdk.type) {
         case "assistant": {
           const parentToolUseId = sdk.parent_tool_use_id;

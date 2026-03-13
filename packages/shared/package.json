@@ -11,9 +11,7 @@
     "build": "tsc",
     "clean": "rm -rf dist"
   },
-  "dependencies": {
-    "@anthropic-ai/claude-agent-sdk": "^0.2.71"
-  },
+  "dependencies": {},
   "devDependencies": {
     "typescript": "^5.7.0"
   }

@@ -17,13 +17,14 @@
     "clean": "rm -rf dist"
   },
   "dependencies": {
-    "@anthropic-ai/claude-agent-sdk": "^0.2.71",
+    "@agentclientprotocol/sdk": "^0.16.1",
     "@lgtm-anywhere/shared": "^0.1.0",
     "cookie": "^1.1.1",
     "express": "^5.1.0",
     "node-pty": "^1.2.0-beta.11",
     "uuid": "^11.1.0",
-    "ws": "^8.19.0"
+    "ws": "^8.19.0",
+    "zod": "^3.25.0"
   },
   "devDependencies": {
     "@types/express": "^5.0.0",

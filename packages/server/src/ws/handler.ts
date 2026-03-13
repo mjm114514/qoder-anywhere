@@ -10,7 +10,6 @@ import type {
   WSServerMessage,
   ControlPayload,
 } from "@lgtm-anywhere/shared";
-import { listSessions } from "@anthropic-ai/claude-agent-sdk";
 import { SessionManager } from "../services/session-manager.js";
 import { TerminalManager } from "../terminal/terminal-manager.js";
 import { handleTerminalConnection } from "../terminal/ws-handler.js";
@@ -153,7 +152,7 @@ async function handleConnection(
   const isActive = sessionManager.subscribeWS(sessionId, ws);
 
   if (!isActive) {
-    // Session is inactive — fetch history from SDK and send via WS
+    // Session is inactive — fetch history via ACP and send via WS
     try {
       const historyEvents =
         await sessionManager.convertHistoryToWSEvents(sessionId);
@@ -204,14 +203,22 @@ async function handleConnection(
         if (activeSession) {
           cwd = activeSession.cwd;
         } else {
-          // Session is inactive (recycled) — look up cwd from SDK to reactivate
-          const allSessions = await listSessions({});
-          const info = allSessions.find((s) => s.sessionId === sessionId);
-          if (!info?.cwd) {
+          // Session is inactive (recycled) — look up cwd from disk to reactivate
+          let sessions: Array<{
+            sessionId: string;
+            workingDir?: string;
+          }>;
+          try {
+            sessions = await sessionManager.listSessions({});
+          } catch {
+            sessions = [];
+          }
+          const info = sessions.find((s) => s.sessionId === sessionId);
+          if (!info?.workingDir) {
             sendError(ws, "Session not found", "SESSION_NOT_FOUND");
             return;
           }
-          cwd = info.cwd;
+          cwd = info.workingDir;
         }
 
         await sessionManager.sendMessage(

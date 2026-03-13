@@ -62,6 +62,13 @@ export type {
 } from "./types/hub.js";
 export type {
   PermissionMode,
+  WsAgentMessage,
+  WsAssistantMessage,
+  WsStreamEvent,
+  WsUserMessage,
+  WsToolProgress,
+  WsResultMessage,
+  WsSystemMessage,
   WSClientMessage,
   WSMessageSend,
   WSAnswerQuestion,
