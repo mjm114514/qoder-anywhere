@@ -6,7 +6,7 @@ import type {
   HubToNodeChallengeResponse,
   NodeToHubMessage,
   NodeToHubResponse,
-} from "@lgtm-anywhere/shared";
+} from "@qoder-anywhere/shared";
 
 interface NodeConnectorOptions {
   hubUrl: string;
@@ -16,7 +16,7 @@ interface NodeConnectorOptions {
 }
 
 /**
- * NodeConnector connects a local lgtm-anywhere server to a hub.
+ * NodeConnector connects a local qoder-anywhere server to a hub.
  *
  * Handshake flow (Node verifies Hub):
  * 1. Node connects WS, sends { type: "challenge", nonce }

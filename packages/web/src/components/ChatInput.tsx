@@ -7,7 +7,7 @@ import {
   type ClipboardEvent,
   type ChangeEvent,
 } from "react";
-import type { UserImageAttachment } from "@lgtm-anywhere/shared";
+import type { UserImageAttachment } from "@qoder-anywhere/shared";
 import "./ChatInput.css";
 
 const MODEL_OPTIONS = [

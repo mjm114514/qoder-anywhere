@@ -10,7 +10,7 @@ import type {
   ControlPayload,
   WsAgentMessage,
   PermissionMode,
-} from "@lgtm-anywhere/shared";
+} from "@qoder-anywhere/shared";
 import type {
   SessionNotification,
   RequestPermissionRequest,

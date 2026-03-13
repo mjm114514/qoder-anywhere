@@ -24,7 +24,7 @@ import type {
   WsUserMessage,
   WsToolProgress,
   WsResultMessage,
-} from "@lgtm-anywhere/shared";
+} from "@qoder-anywhere/shared";
 
 // ── ACP SessionUpdate sub-types (from @agentclientprotocol/sdk) ──
 

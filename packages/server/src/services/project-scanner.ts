@@ -1,4 +1,4 @@
-import type { ProjectListItem } from "@lgtm-anywhere/shared";
+import type { ProjectListItem } from "@qoder-anywhere/shared";
 import { SessionManager } from "./session-manager.js";
 
 export async function scanProjects(

@@ -1,5 +1,5 @@
 import { useState } from "react";
-import type { PermissionMode } from "@lgtm-anywhere/shared";
+import type { PermissionMode } from "@qoder-anywhere/shared";
 import type { PendingToolApproval } from "../hooks/useSessionSocket";
 import "./ToolApproval.css";
 

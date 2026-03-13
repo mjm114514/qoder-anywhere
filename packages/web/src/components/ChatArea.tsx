@@ -2,7 +2,7 @@ import { useState, useCallback, useRef, useEffect } from "react";
 import type {
   PermissionMode,
   UserImageAttachment,
-} from "@lgtm-anywhere/shared";
+} from "@qoder-anywhere/shared";
 import { createSession, createNodeSession } from "../api";
 import { useSessionSocket } from "../hooks/useSessionSocket";
 import { MessageList } from "./MessageList";

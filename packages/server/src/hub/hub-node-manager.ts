@@ -6,7 +6,7 @@ import type {
   NodeToHubMessage,
   NodeToHubResponse,
   NodeInfo,
-} from "@lgtm-anywhere/shared";
+} from "@qoder-anywhere/shared";
 
 export interface ConnectedNode {
   nodeId: string;

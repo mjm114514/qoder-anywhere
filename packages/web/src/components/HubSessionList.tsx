@@ -1,7 +1,7 @@
 import { useEffect, useState, useCallback } from "react";
 import { fetchNodeSessions } from "../api";
 import { formatRelativeTime } from "../utils/format";
-import type { SessionSummary, SessionState } from "@lgtm-anywhere/shared";
+import type { SessionSummary, SessionState } from "@qoder-anywhere/shared";
 import "./SessionList.css";
 
 interface HubSessionListProps {

@@ -9,7 +9,7 @@ import type {
   SessionState,
   WSServerMessage,
   ControlPayload,
-} from "@lgtm-anywhere/shared";
+} from "@qoder-anywhere/shared";
 import { SessionManager } from "../services/session-manager.js";
 import { TerminalManager } from "../terminal/terminal-manager.js";
 import { handleTerminalConnection } from "../terminal/ws-handler.js";

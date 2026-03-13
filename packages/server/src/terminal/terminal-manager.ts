@@ -6,7 +6,7 @@ import { EventEmitter } from "node:events";
 import type {
   TerminalInfo,
   WSTerminalServerMessage,
-} from "@lgtm-anywhere/shared";
+} from "@qoder-anywhere/shared";
 
 const MAX_OUTPUT_BUFFER = 1000;
 

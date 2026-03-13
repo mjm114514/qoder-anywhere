@@ -3,7 +3,7 @@ import type {
   CreateSessionRequest,
   UpdateSessionRequest,
   PermissionMode,
-} from "@lgtm-anywhere/shared";
+} from "@qoder-anywhere/shared";
 import { SessionManager } from "../services/session-manager.js";
 
 export function createSessionRoutes(sessionManager: SessionManager): Router {

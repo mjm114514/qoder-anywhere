@@ -7,7 +7,7 @@ import type {
   TodoItem,
   PermissionMode,
   WsAgentMessage,
-} from "@lgtm-anywhere/shared";
+} from "@qoder-anywhere/shared";
 import { fetchWsToken, buildWsUrl } from "../api";
 
 // ── Subagent state ──
