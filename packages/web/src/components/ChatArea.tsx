@@ -20,11 +20,8 @@ const PERMISSION_MODE_OPTIONS: {
   value: PermissionMode;
   color: string;
 }[] = [
-  { label: "Bypass", value: "bypassPermissions", color: "#c62828" },
+  { label: "YOLO", value: "yolo", color: "#d32f2f" },
   { label: "Default", value: "default", color: "#1976d2" },
-  { label: "Accept Edits", value: "acceptEdits", color: "#9c27b0" },
-  { label: "Plan", value: "plan", color: "#4caf50" },
-  { label: "Don't Ask", value: "dontAsk", color: "#78909c" },
 ];
 
 function getPermissionColor(mode: PermissionMode): string {
@@ -111,7 +108,7 @@ export function ChatArea({
   const [creating, setCreating] = useState(false);
   const [createError, setCreateError] = useState<string | null>(null);
   const [newSessionPermMode, setNewSessionPermMode] =
-    useState<PermissionMode>("bypassPermissions");
+    useState<PermissionMode>("yolo");
   // Compute WS path prefix for hub mode
   const wsPathPrefix = nodeId ? `/ws/node/${nodeId}` : undefined;
   const {

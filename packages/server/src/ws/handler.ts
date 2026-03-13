@@ -10,7 +10,7 @@ import type {
   WSServerMessage,
   ControlPayload,
 } from "@lgtm-anywhere/shared";
-import { listSessions } from "@anthropic-ai/claude-agent-sdk";
+import { listSessions } from "qoder-sdk";
 import { SessionManager } from "../services/session-manager.js";
 import { TerminalManager } from "../terminal/terminal-manager.js";
 import { handleTerminalConnection } from "../terminal/ws-handler.js";
@@ -269,6 +269,7 @@ async function handleConnection(
         "bypassPermissions",
         "plan",
         "dontAsk",
+        "yolo",
       ];
       if (!validModes.includes(modeMsg.mode)) {
         sendError(

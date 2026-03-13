@@ -2,7 +2,7 @@ import { Router } from "express";
 import {
   listSessions,
   getSessionMessages,
-} from "@anthropic-ai/claude-agent-sdk";
+} from "qoder-sdk";
 import type {
   CreateSessionRequest,
   UpdateSessionRequest,
@@ -150,6 +150,7 @@ export function createSessionRoutes(sessionManager: SessionManager): Router {
           "bypassPermissions",
           "plan",
           "dontAsk",
+          "yolo",
         ];
         if (!validModes.includes(body.permissionMode as PermissionMode)) {
           res.status(400).json({

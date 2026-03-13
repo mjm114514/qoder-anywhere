@@ -3,12 +3,13 @@
   "private": true,
   "type": "module",
   "workspaces": [
+    "packages/qoder-sdk",
     "packages/shared",
     "packages/server",
     "packages/web"
   ],
   "scripts": {
-    "build": "npm run build -w packages/shared && npm run build -w packages/server && npm run build -w packages/web",
+    "build": "npm run build -w packages/qoder-sdk && npm run build -w packages/shared && npm run build -w packages/server && npm run build -w packages/web",
     "dev": "concurrently -n server,web -c blue,green \"npm run dev -w packages/server\" \"npm run dev -w packages/web\"",
     "start": "node packages/server/dist/cli.js",
     "prepublishOnly": "npm run build && cp -r packages/web/dist packages/server/public",

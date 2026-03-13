@@ -7,7 +7,7 @@ import type {
   TodoItem,
   PermissionMode,
 } from "@lgtm-anywhere/shared";
-import type { SDKMessage } from "@anthropic-ai/claude-agent-sdk";
+import type { SDKMessage } from "qoder-sdk";
 import { fetchWsToken, buildWsUrl } from "../api";
 
 // ── Subagent state ──
@@ -83,7 +83,7 @@ export function useSessionSocket(
   initialPermissionMode?: PermissionMode,
   wsPathPrefix?: string,
 ): UseSessionSocketReturn {
-  const effectiveInitialMode = initialPermissionMode ?? "bypassPermissions";
+  const effectiveInitialMode = initialPermissionMode ?? "yolo";
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [isStreaming, setIsStreaming] = useState(false);
   const [isLoadingHistory, setIsLoadingHistory] = useState(false);

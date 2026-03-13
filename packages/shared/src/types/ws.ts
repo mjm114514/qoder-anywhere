@@ -1,4 +1,4 @@
-import type { SDKMessage } from "@anthropic-ai/claude-agent-sdk";
+import type { SDKMessage } from "qoder-sdk";
 
 // ── Permission mode ──
 
@@ -7,7 +7,8 @@ export type PermissionMode =
   | "acceptEdits"
   | "bypassPermissions"
   | "plan"
-  | "dontAsk";
+  | "dontAsk"
+  | "yolo";
 
 // ── Client → Server ──
 

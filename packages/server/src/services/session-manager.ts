@@ -8,7 +8,7 @@ import {
   type SDKUserMessage,
   type SDKUserMessageReplay,
   type PermissionMode,
-} from "@anthropic-ai/claude-agent-sdk";
+} from "qoder-sdk";
 import { EventEmitter } from "node:events";
 import { randomUUID } from "node:crypto";
 import type WebSocket from "ws";
@@ -537,7 +537,7 @@ export class SessionManager extends EventEmitter {
             message: m.message,
             parent_tool_use_id: m.parent_tool_use_id ?? null,
             session_id: m.session_id ?? sessionId,
-          } as SDKAssistantMessage),
+          } as unknown as SDKAssistantMessage),
         );
 
         // Scan assistant message content blocks for the last TodoWrite tool_use

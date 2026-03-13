@@ -11,10 +11,17 @@ import type { UserImageAttachment } from "@lgtm-anywhere/shared";
 import "./ChatInput.css";
 
 const MODEL_OPTIONS = [
-  { label: "Auto", value: "" },
-  { label: "Opus", value: "claude-opus-4-6" },
-  { label: "Sonnet", value: "claude-sonnet-4-6" },
-  { label: "Haiku", value: "claude-haiku-4-5-20251001" },
+  { label: "Default", value: "" },
+  { label: "Auto", value: "auto" },
+  { label: "Ultimate", value: "ultimate" },
+  { label: "Performance", value: "performance" },
+  { label: "Q35 Model", value: "q35model" },
+  { label: "Q Model", value: "qmodel" },
+  { label: "G Model", value: "gmodel" },
+  { label: "K Model", value: "kmodel" },
+  { label: "M Model", value: "mmodel" },
+  { label: "Efficient", value: "efficient" },
+  { label: "Lite", value: "lite" },
 ];
 
 const isMac =

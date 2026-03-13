@@ -37,16 +37,10 @@ const EXIT_PLAN_MODE_OPTIONS: {
     color: "#1976d2",
   },
   {
-    label: "Bypass",
-    fullLabel: "Approve the plan and switch to Bypass mode",
-    mode: "bypassPermissions",
-    color: "#c62828",
-  },
-  {
-    label: "Accept Edits",
-    fullLabel: "Approve the plan and switch to Accept Edits mode",
-    mode: "acceptEdits",
-    color: "#9c27b0",
+    label: "YOLO",
+    fullLabel: "Approve the plan and switch to YOLO mode",
+    mode: "yolo",
+    color: "#d32f2f",
   },
 ];
 

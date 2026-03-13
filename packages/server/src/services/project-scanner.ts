@@ -1,4 +1,4 @@
-import { listSessions } from "@anthropic-ai/claude-agent-sdk";
+import { listSessions } from "qoder-sdk";
 import type { ProjectListItem } from "@lgtm-anywhere/shared";
 
 export async function scanProjects(): Promise<ProjectListItem[]> {
